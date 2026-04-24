@@ -18,6 +18,7 @@
         <module>edge-dictionary-core</module>
         <module>ingest-core</module>
         <module>query-core</module>
+        <module>query-cypher</module>
         <module>ingest-configuration</module>
         <module>ingest-csv</module>
         <module>ingest-json</module>
