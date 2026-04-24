@@ -7,6 +7,7 @@ import org.junit.jupiter.api.Test;
 
 import datawave.query.cypher.ast.CypherQuery;
 import datawave.query.cypher.parser.CypherParser;
+import datawave.query.cypher.parser.CypherSyntaxException;
 
 class SemanticAnalyzerTest {
 
@@ -50,8 +51,11 @@ class SemanticAnalyzerTest {
     }
 
     @Test
-    void rejectsUnboundedVariableLength() {
-        assertThatExceptionOfType(SemanticException.class).isThrownBy(() -> analyze("MATCH (a)-[r:KNOWS*]->(b) RETURN a, b"));
+    void rejectsUnboundedVariableLengthAtParseTime() {
+        // Unbounded [*] and half-bounded [*n] / [*..n] / [*n..] forms are now rejected by the grammar,
+        // so they surface as syntax errors rather than semantic ones.
+        assertThatExceptionOfType(CypherSyntaxException.class).isThrownBy(() -> analyze("MATCH (a)-[r:KNOWS*]->(b) RETURN a, b"));
+        assertThatExceptionOfType(CypherSyntaxException.class).isThrownBy(() -> analyze("MATCH (a)-[r:KNOWS*3]->(b) RETURN a, b"));
     }
 
     @Test

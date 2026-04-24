@@ -1,5 +1,6 @@
 package datawave.query.cypher.semantic;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
@@ -21,7 +22,7 @@ public final class Binding {
         this.name = Objects.requireNonNull(name);
         this.type = Objects.requireNonNull(type);
         this.firstSeen = firstSeen == null ? SourceLocation.UNKNOWN : firstSeen;
-        this.labelsOrTypes = Collections.unmodifiableList(labelsOrTypes);
+        this.labelsOrTypes = Collections.unmodifiableList(new ArrayList<>(labelsOrTypes));
     }
 
     public String getName() {
@@ -37,9 +38,12 @@ public final class Binding {
     }
 
     /**
-     * For NODE bindings, the labels asserted for the variable (intersection
-     * of all pattern occurrences). For RELATIONSHIP bindings, the declared
-     * relationship types. Empty for PATH / VALUE bindings.
+     * For NODE bindings, the union of labels asserted for the variable
+     * across all pattern occurrences (matching Cypher's additional-label
+     * assertion semantics: each reuse of a node variable adds any newly
+     * declared labels to the set the variable must carry). For RELATIONSHIP
+     * bindings, the declared relationship types. Empty for PATH / VALUE
+     * bindings.
      */
     public List<String> getLabelsOrTypes() {
         return labelsOrTypes;

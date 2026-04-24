@@ -1,5 +1,6 @@
 package datawave.query.cypher.ast;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
@@ -16,7 +17,7 @@ public final class PropertyExpression extends Expression {
     public PropertyExpression(SourceLocation location, Expression target, List<String> propertyPath) {
         super(location);
         this.target = target;
-        this.propertyPath = Collections.unmodifiableList(propertyPath);
+        this.propertyPath = Collections.unmodifiableList(new ArrayList<>(propertyPath));
     }
 
     public Expression getTarget() {

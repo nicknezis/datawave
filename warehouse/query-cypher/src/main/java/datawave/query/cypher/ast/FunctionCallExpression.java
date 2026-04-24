@@ -1,5 +1,6 @@
 package datawave.query.cypher.ast;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
@@ -13,7 +14,7 @@ public final class FunctionCallExpression extends Expression {
         super(location);
         this.name = name;
         this.distinct = distinct;
-        this.arguments = Collections.unmodifiableList(arguments);
+        this.arguments = Collections.unmodifiableList(new ArrayList<>(arguments));
     }
 
     public String getName() {

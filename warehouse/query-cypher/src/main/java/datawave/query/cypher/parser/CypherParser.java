@@ -37,8 +37,8 @@ public final class CypherParser {
 
         if (lexErrors.hasErrors() || parseErrors.hasErrors()) {
             java.util.List<CypherSyntaxException.ParseMessage> all = new java.util.ArrayList<>();
-            all.addAll(lexErrors.drain());
-            all.addAll(parseErrors.drain());
+            all.addAll(lexErrors.snapshot());
+            all.addAll(parseErrors.snapshot());
             throw new CypherSyntaxException(all);
         }
 

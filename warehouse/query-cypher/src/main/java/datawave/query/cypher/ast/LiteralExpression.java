@@ -1,5 +1,6 @@
 package datawave.query.cypher.ast;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -52,7 +53,7 @@ public final class LiteralExpression extends Expression {
     }
 
     public static LiteralExpression ofList(SourceLocation location, List<Expression> items) {
-        return new LiteralExpression(location, Kind.LIST, Collections.unmodifiableList(items));
+        return new LiteralExpression(location, Kind.LIST, Collections.unmodifiableList(new ArrayList<>(items)));
     }
 
     public static LiteralExpression ofMap(SourceLocation location, Map<String,Expression> entries) {

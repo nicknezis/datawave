@@ -32,8 +32,9 @@ import datawave.query.cypher.ast.WithClause;
  * deliverable: downstream planner stages will replace this with a physical
  * plan, but for M0 the AST dump is what callers get.
  *
- * The format is intended for humans and tests. It is not round-trippable back
- * into Cypher text; use {@link Cypherizer} for that if it's ever needed.
+ * The format is intended for humans and tests. It is not round-trippable
+ * back into Cypher text — if that's ever needed, a separate serializer
+ * should be added rather than overloading this printer.
  */
 public final class AstPrinter {
 

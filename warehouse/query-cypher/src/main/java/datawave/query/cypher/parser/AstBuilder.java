@@ -193,13 +193,10 @@ final class AstBuilder extends CypherBaseVisitor<Object> {
                 }
             }
             if (d.rangeLiteral() != null) {
+                // The grammar now requires both lower and upper bounds; see Cypher.g4.
                 variableLength = true;
-                if (d.rangeLiteral().lower != null) {
-                    lower = Integer.parseInt(d.rangeLiteral().lower.getText());
-                }
-                if (d.rangeLiteral().upper != null) {
-                    upper = Integer.parseInt(d.rangeLiteral().upper.getText());
-                }
+                lower = Integer.parseInt(d.rangeLiteral().lower.getText());
+                upper = Integer.parseInt(d.rangeLiteral().upper.getText());
             }
             if (d.properties() != null) {
                 props = buildProperties(d.properties());

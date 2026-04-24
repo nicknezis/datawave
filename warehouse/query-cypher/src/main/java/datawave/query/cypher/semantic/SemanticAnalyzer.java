@@ -110,10 +110,8 @@ public final class SemanticAnalyzer {
             n.getProperties().ifPresent(props -> validatePropertiesLiteral(scope, props));
         }
         for (RelationshipPattern r : element.getRelationships()) {
-            if (r.isVariableLength() && !r.getUpper().isPresent()) {
-                issues.add(new SemanticException.Issue(r.getLocation(),
-                                "unbounded variable-length relationship [*] is not supported; provide an upper bound, e.g. [*1..3]"));
-            }
+            // Grammar enforces that variable-length patterns always provide both bounds,
+            // so only the lower/upper ordering needs a semantic check here.
             if (r.getLower().isPresent() && r.getUpper().isPresent() && r.getLower().getAsInt() > r.getUpper().getAsInt()) {
                 issues.add(new SemanticException.Issue(r.getLocation(),
                                 "variable-length lower bound " + r.getLower().getAsInt() + " exceeds upper bound " + r.getUpper().getAsInt()));

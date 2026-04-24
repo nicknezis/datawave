@@ -1,5 +1,6 @@
 package datawave.query.cypher.ast;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
@@ -19,8 +20,8 @@ public final class WithClause extends ReadingClause {
         super(location);
         this.distinct = distinct;
         this.projectAll = projectAll;
-        this.projections = Collections.unmodifiableList(projections);
-        this.orderBy = Collections.unmodifiableList(orderBy);
+        this.projections = Collections.unmodifiableList(new ArrayList<>(projections));
+        this.orderBy = Collections.unmodifiableList(new ArrayList<>(orderBy));
         this.skip = skip;
         this.limit = limit;
         this.where = where;

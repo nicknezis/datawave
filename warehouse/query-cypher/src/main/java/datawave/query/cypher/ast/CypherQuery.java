@@ -1,5 +1,6 @@
 package datawave.query.cypher.ast;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
@@ -16,8 +17,8 @@ public final class CypherQuery extends AstNode {
 
     public CypherQuery(SourceLocation location, List<SingleQuery> branches, List<Boolean> unionAll) {
         super(location);
-        this.branches = Collections.unmodifiableList(branches);
-        this.unionAll = Collections.unmodifiableList(unionAll);
+        this.branches = Collections.unmodifiableList(new ArrayList<>(branches));
+        this.unionAll = Collections.unmodifiableList(new ArrayList<>(unionAll));
     }
 
     public List<SingleQuery> getBranches() {

@@ -1,5 +1,6 @@
 package datawave.query.cypher.ast;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
@@ -29,7 +30,7 @@ public final class RelationshipPattern extends AstNode {
         super(location);
         this.direction = direction;
         this.variable = variable;
-        this.types = Collections.unmodifiableList(types);
+        this.types = Collections.unmodifiableList(new ArrayList<>(types));
         this.variableLength = variableLength;
         this.lower = lower;
         this.upper = upper;

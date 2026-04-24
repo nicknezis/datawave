@@ -28,7 +28,12 @@ final class CollectingErrorListener extends BaseErrorListener {
         return !messages.isEmpty();
     }
 
-    List<CypherSyntaxException.ParseMessage> drain() {
+    /**
+     * Returns a snapshot copy of the errors collected so far. The internal
+     * buffer is intentionally left intact, since this listener is constructed
+     * fresh per parse and then discarded; the name reflects that.
+     */
+    List<CypherSyntaxException.ParseMessage> snapshot() {
         return Collections.unmodifiableList(new ArrayList<>(messages));
     }
 }

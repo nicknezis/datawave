@@ -86,7 +86,11 @@ relationshipTypes
     ;
 
 rangeLiteral
-    : STAR (lower=INTEGER)? (DOTDOT (upper=INTEGER)?)?
+    // v1 supports only the fully bounded form [*lo..hi]. Forms like [*],
+    // [*n], [*..n], [*n..] are rejected at parse time with a clean
+    // "mismatched input" error rather than accepted and later rejected
+    // by the semantic analyzer.
+    : STAR lower=INTEGER DOTDOT upper=INTEGER
     ;
 
 properties

@@ -1,5 +1,6 @@
 package datawave.query.cypher.ast;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
@@ -13,7 +14,7 @@ public final class MatchClause extends ReadingClause {
     public MatchClause(SourceLocation location, boolean optional, List<Pattern> patterns, Expression where) {
         super(location);
         this.optional = optional;
-        this.patterns = Collections.unmodifiableList(patterns);
+        this.patterns = Collections.unmodifiableList(new ArrayList<>(patterns));
         this.where = where;
     }
 

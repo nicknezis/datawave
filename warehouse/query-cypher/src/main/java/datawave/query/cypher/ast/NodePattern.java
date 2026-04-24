@@ -1,5 +1,6 @@
 package datawave.query.cypher.ast;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
@@ -13,7 +14,7 @@ public final class NodePattern extends AstNode {
     public NodePattern(SourceLocation location, String variable, List<String> labels, PropertiesExpression properties) {
         super(location);
         this.variable = variable;
-        this.labels = Collections.unmodifiableList(labels);
+        this.labels = Collections.unmodifiableList(new ArrayList<>(labels));
         this.properties = properties;
     }
 

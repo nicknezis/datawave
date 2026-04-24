@@ -1,5 +1,6 @@
 package datawave.query.cypher.ast;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
@@ -17,7 +18,7 @@ public final class SingleQuery extends AstNode {
 
     public SingleQuery(SourceLocation location, List<ReadingClause> readingClauses, ReturnClause returnClause) {
         super(location);
-        this.readingClauses = Collections.unmodifiableList(readingClauses);
+        this.readingClauses = Collections.unmodifiableList(new ArrayList<>(readingClauses));
         this.returnClause = returnClause;
     }
 
