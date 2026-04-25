@@ -10,10 +10,12 @@
     <packaging>jar</packaging>
     <name>${project.artifactId}</name>
     <description>
-        Cypher graph-query front-end for DataWave. M0 deliverable: ANTLR4
-        lexer/parser for a read-only Cypher subset (MATCH/WHERE/WITH/RETURN),
-        a Java AST, and a minimal semantic analyzer (scope + binding table).
-        Downstream planner / query-logic modules consume the AST produced here.
+        Cypher graph-query front-end for DataWave. M0: ANTLR4 lexer/parser
+        for a read-only Cypher subset, AST, and a minimal semantic analyzer.
+        M1: graph-schema mapping, single-hop logical planner, JEXL hop
+        translator that reuses EdgeTableRangeBuildingVisitor, and a
+        CypherQueryLogic that runs single-hop MATCH/WHERE/RETURN end-to-end
+        against the edge table.
     </description>
     <properties>
         <version.antlr4>4.13.1</version.antlr4>
@@ -25,8 +27,59 @@
             <version>${version.antlr4}</version>
         </dependency>
         <dependency>
+            <groupId>org.apache.accumulo</groupId>
+            <artifactId>accumulo-core</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.google.guava</groupId>
+            <artifactId>guava</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-api</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework</groupId>
+            <artifactId>spring-context</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>gov.nsa.datawave</groupId>
+            <artifactId>datawave-core</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>gov.nsa.datawave.core</groupId>
+            <artifactId>datawave-core-query</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>gov.nsa.datawave.core</groupId>
+            <artifactId>datawave-core-common</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>gov.nsa.datawave</groupId>
+            <artifactId>datawave-query-core</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>gov.nsa.datawave.webservices</groupId>
+            <artifactId>datawave-ws-client</artifactId>
+        </dependency>
+        <!-- test scope -->
+        <dependency>
+            <groupId>junit</groupId>
+            <artifactId>junit</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
             <groupId>org.assertj</groupId>
             <artifactId>assertj-core</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>gov.nsa.datawave</groupId>
+            <artifactId>datawave-in-memory-accumulo</artifactId>
             <scope>test</scope>
         </dependency>
     </dependencies>
