@@ -99,6 +99,14 @@ public final class MultiHopExecutor {
                 // Build frontier from previous results.
                 String junctionVar = hop.getSource().getVariable();
                 Set<String> frontier = buildFrontier(current, junctionVar);
+                // Intersect with any literal identity filters on the hop source
+                // (e.g., from WITH WHERE or inline node properties on the junction
+                // variable), so that paths through disallowed junction values are
+                // not expanded.
+                Map<String,String> srcIdentityEquals = hop.getSource().getIdentityEquals();
+                if (!srcIdentityEquals.isEmpty()) {
+                    frontier.retainAll(new LinkedHashSet<>(srcIdentityEquals.values()));
+                }
                 if (frontier.isEmpty()) {
                     return new ArrayList<>();
                 }

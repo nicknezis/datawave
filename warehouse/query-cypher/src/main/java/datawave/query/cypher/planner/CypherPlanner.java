@@ -242,6 +242,18 @@ public final class CypherPlanner {
     }
 
     private void processWithClause(WithClause with, Map<String,NodeContext> nodeContexts) {
+        // Reject WITH-level ORDER BY / SKIP / LIMIT — these affect which rows flow
+        // into the next MATCH and are not yet implemented in M2.
+        if (!with.getOrderBy().isEmpty()) {
+            throw new CypherUnsupportedException("WITH ORDER BY is not supported in M2; use ORDER BY on the final RETURN");
+        }
+        if (with.getSkip().isPresent()) {
+            throw new CypherUnsupportedException("WITH SKIP is not supported in M2; use SKIP on the final RETURN");
+        }
+        if (with.getLimit().isPresent()) {
+            throw new CypherUnsupportedException("WITH LIMIT is not supported in M2; use LIMIT on the final RETURN");
+        }
+
         // WITH WHERE can add additional filters to variables still in scope.
         with.getWhere().ifPresent(where -> {
             Set<String> withVars = new LinkedHashSet<>();
@@ -252,9 +264,6 @@ public final class CypherPlanner {
                 applyWithWhereTerm(term, nodeContexts, withVars);
             }
         });
-        // Note: WITH ORDER BY / SKIP / LIMIT inside WITH are validated by the
-        // semantic analyzer but not executed separately in M2; they do not affect
-        // the logical plan (ORDER BY and LIMIT on the final RETURN dominate).
     }
 
     // ---- node context helpers -------------------------------------------
@@ -387,15 +396,26 @@ public final class CypherPlanner {
     }
 
     private void applyWithWhereTerm(Expression term, Map<String,NodeContext> nodeContexts, Set<String> withVars) {
-        // WITH WHERE is validated by the semantic analyzer; we apply equality
-        // filters on projected node variables the same way as MATCH WHERE.
+        // Validate WITH WHERE terms the same way as MATCH WHERE: reject NOT, OR,
+        // non-equality binary expressions, and unsupported types rather than silently
+        // ignoring them (which would produce wrong results).
+        if (term instanceof UnaryExpression) {
+            throw new CypherUnsupportedException("WITH WHERE: NOT is not supported in M2");
+        }
+        if (term instanceof FunctionCallExpression) {
+            throw new CypherUnsupportedException("WITH WHERE: function calls are not supported in M2");
+        }
         if (!(term instanceof BinaryExpression)) {
-            return; // non-equality terms silently pass (semantic layer validated)
+            throw new CypherUnsupportedException("WITH WHERE: unsupported expression type; equality terms are required");
         }
         BinaryExpression bin = (BinaryExpression) term;
-        if (bin.getOperator() != BinaryExpression.Operator.EQ) {
-            return;
+        if (bin.getOperator() == BinaryExpression.Operator.OR) {
+            throw new CypherUnsupportedException("WITH WHERE: OR is not supported in M2");
         }
+        if (bin.getOperator() != BinaryExpression.Operator.EQ) {
+            throw new CypherUnsupportedException("WITH WHERE: only '=' equality is supported in M2, got " + bin.getOperator().getSymbol());
+        }
+
         Expression lhs = bin.getLeft();
         Expression rhs = bin.getRight();
         if (!(lhs instanceof PropertyExpression) && rhs instanceof PropertyExpression) {
@@ -404,15 +424,18 @@ public final class CypherPlanner {
             rhs = tmp;
         }
         if (!(lhs instanceof PropertyExpression)) {
-            return;
+            throw new CypherUnsupportedException("WITH WHERE: equality must reference a bound variable's property, e.g. a.name = 'X'");
         }
         PropertyExpression pe = (PropertyExpression) lhs;
-        if (pe.getPropertyPath().size() != 1 || !(pe.getTarget() instanceof VariableExpression)) {
-            return;
+        if (pe.getPropertyPath().size() != 1) {
+            throw new CypherUnsupportedException("WITH WHERE: nested property paths are not supported in M2");
+        }
+        if (!(pe.getTarget() instanceof VariableExpression)) {
+            throw new CypherUnsupportedException("WITH WHERE: property access must be on a bound variable directly");
         }
         String var = ((VariableExpression) pe.getTarget()).getName();
         if (!nodeContexts.containsKey(var) || !withVars.contains(var)) {
-            return;
+            throw new CypherUnsupportedException("WITH WHERE: variable '" + var + "' is not a projected node variable in this WITH clause");
         }
         String prop = pe.getPropertyPath().get(0);
         String value = literalString(rhs, "WITH WHERE " + var + "." + prop);
@@ -421,6 +444,9 @@ public final class CypherPlanner {
             ctx.identityEquals.put(prop, value);
         } else if (ctx.mapping.getProperties().containsKey(prop)) {
             ctx.shardFilters.put(prop, value);
+        } else {
+            throw new CypherUnsupportedException("WITH WHERE: property '" + prop + "' is not defined in the schema for label '"
+                            + ctx.mapping.getLabel() + "'");
         }
     }
 

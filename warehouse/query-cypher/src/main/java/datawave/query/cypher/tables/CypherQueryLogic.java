@@ -90,12 +90,12 @@ public class CypherQueryLogic extends BaseQueryLogic<Map.Entry<Key,Value>> {
         CypherFrontEnd.Analysis analysis = new CypherFrontEnd().analyze(cypherText);
         CypherPlan plan = new CypherPlanner(graphSchema).plan(analysis);
 
-        // Pre-translate all hops using the plan's literal identity filters.
-        // Hops after the first will be re-translated at scan time with frontier values.
+        // Pre-translate only the first hop using the plan's literal identity filters.
+        // Hops after the first are translated at scan time with frontier values.
         HopTranslator translator = new HopTranslator();
         List<HopTranslation> translations = new ArrayList<>();
-        for (int i = 0; i < plan.getHops().size(); i++) {
-            translations.add(translator.translate(plan.getHops().get(i)));
+        if (!plan.getHops().isEmpty()) {
+            translations.add(translator.translate(plan.getHops().get(0)));
         }
 
         CypherQueryConfiguration cfg = new CypherQueryConfiguration();
@@ -194,10 +194,16 @@ public class CypherQueryLogic extends BaseQueryLogic<Map.Entry<Key,Value>> {
         HopTranslator translator = new HopTranslator();
         StringBuilder sb = new StringBuilder("Cypher plan: ").append(plan.getHops().size()).append(" hop(s)\n");
         for (int i = 0; i < plan.getHops().size(); i++) {
-            HopTranslation t = translator.translate(plan.getHops().get(i));
-            sb.append("  hop ").append(i).append(": ranges=").append(t.getRanges())
-                            .append(" filter=").append(t.getFilterJexl())
-                            .append(" swap=").append(t.isSwappedEndpoints()).append('\n');
+            sb.append("  hop ").append(i).append(": ");
+            if (i == 0) {
+                HopTranslation t = translator.translate(plan.getHops().get(i));
+                sb.append("ranges=").append(t.getRanges())
+                                .append(" filter=").append(t.getFilterJexl())
+                                .append(" swap=").append(t.isSwappedEndpoints());
+            } else {
+                sb.append("frontier-translated at runtime");
+            }
+            sb.append('\n');
         }
         sb.append("  distinct=").append(plan.isDistinct())
                         .append(" orderBy=").append(plan.getOrderBy().size()).append(" item(s)")
