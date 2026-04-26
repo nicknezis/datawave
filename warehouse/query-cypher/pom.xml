@@ -13,7 +13,7 @@
         Cypher graph-query front-end for DataWave. M0: ANTLR4 lexer/parser
         for a read-only Cypher subset, AST, and a minimal semantic analyzer.
         M1: graph-schema mapping, single-hop logical planner, JEXL hop
-        translator that reuses EdgeTableRangeBuildingVisitor, and a
+        translator that builds Accumulo ranges directly, and a
         CypherQueryLogic that runs single-hop MATCH/WHERE/RETURN end-to-end
         against the edge table.
     </description>

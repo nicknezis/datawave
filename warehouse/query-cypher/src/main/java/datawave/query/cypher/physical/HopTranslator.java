@@ -93,12 +93,12 @@ public final class HopTranslator {
             }
             return out;
         }
-        // sink-only: full table scan filtered by EdgeFilterIterator. Useful
-        // diagnostic; not what we want for production. M1 only reaches here
-        // for a directed schema-rel where the sink-only filter is the only
-        // option. Document that clearly.
-        out.add(new Range());
-        return out;
+        // Directed relationships write only the forward (source→sink) row, so
+        // a sink-only filter would require a full edge-table scan to find
+        // matching rows. Reject this in M1 to prevent accidental unbounded scans.
+        throw new CypherUnsupportedException(
+                        "Directed relationship scans with only a sink identity filter are unsupported in M1 "
+                                        + "because they require an unbounded edge-table scan");
     }
 
     private String buildFilterJexl(HopSpec hop, NodeBinding scanSource, NodeBinding scanSink) {

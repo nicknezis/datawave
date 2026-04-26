@@ -38,9 +38,10 @@ public final class NodeBinding {
     }
 
     /**
-     * Equality filters on the identity property: zero entries means
-     * "match any vertex of this label"; one or more entries means
-     * "match a vertex whose identity equals one of these values".
+     * Equality filters on the identity property: an empty map means
+     * "match any vertex of this label"; a single entry means
+     * "match a vertex whose identity equals this value". M1 populates
+     * at most one entry (the single identity property).
      */
     public Map<String,String> getIdentityEquals() {
         return identityEquals;

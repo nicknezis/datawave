@@ -31,6 +31,7 @@ import datawave.query.cypher.planner.CypherPlanner;
 import datawave.query.cypher.transformer.CypherQueryTransformer;
 import datawave.query.cypher.transformer.CypherRow;
 import datawave.query.iterator.filter.EdgeFilterIterator;
+import datawave.query.util.QueryScannerHelper;
 
 /**
  * The M1 single-hop Cypher query logic. Bridges the Cypher front-end
@@ -129,9 +130,11 @@ public class CypherQueryLogic extends BaseQueryLogic<Map.Entry<Key,Value>> {
 
         AccumuloClient client = cfg.getClient();
         Set<Authorizations> auths = cfg.getAuthorizations();
-        Authorizations primary = auths == null || auths.isEmpty() ? Authorizations.EMPTY : auths.iterator().next();
+        if (auths == null || auths.isEmpty()) {
+            auths = Collections.singleton(Authorizations.EMPTY);
+        }
 
-        BatchScanner batchScanner = client.createBatchScanner(cfg.getTableName(), primary, queryThreads);
+        BatchScanner batchScanner = QueryScannerHelper.createBatchScanner(client, cfg.getTableName(), auths, queryThreads, cfg.getQuery());
         batchScanner.setRanges(cfg.getHopTranslation().getRanges());
 
         IteratorSetting filter = new IteratorSetting(FILTER_PRIORITY, EdgeFilterIterator.class.getSimpleName() + "_" + FILTER_PRIORITY,
