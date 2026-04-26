@@ -105,7 +105,7 @@ public final class MultiHopExecutor {
                 // not expanded.
                 Map<String,String> srcIdentityEquals = hop.getSource().getIdentityEquals();
                 if (!srcIdentityEquals.isEmpty()) {
-                    frontier.retainAll(new LinkedHashSet<>(srcIdentityEquals.values()));
+                    frontier.retainAll(srcIdentityEquals.values());
                 }
                 if (frontier.isEmpty()) {
                     return new ArrayList<>();
