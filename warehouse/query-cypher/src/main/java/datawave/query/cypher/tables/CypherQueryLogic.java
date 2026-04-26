@@ -1,14 +1,15 @@
 package datawave.query.cypher.tables;
 
+import java.util.AbstractMap;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.Iterator;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
 import org.apache.accumulo.core.client.AccumuloClient;
-import org.apache.accumulo.core.client.BatchScanner;
-import org.apache.accumulo.core.client.IteratorSetting;
 import org.apache.accumulo.core.data.Key;
 import org.apache.accumulo.core.data.Value;
 import org.apache.accumulo.core.security.Authorizations;
@@ -22,6 +23,9 @@ import datawave.core.query.logic.QueryLogicTransformer;
 import datawave.microservice.query.Query;
 import datawave.query.cypher.CypherFrontEnd;
 import datawave.query.cypher.config.CypherQueryConfiguration;
+import datawave.query.cypher.executor.MultiHopExecutor;
+import datawave.query.cypher.executor.PathTuple;
+import datawave.query.cypher.executor.ShardEnrichmentService;
 import datawave.query.cypher.mapping.GraphSchema;
 import datawave.query.cypher.mapping.GraphSchemaLoader;
 import datawave.query.cypher.physical.HopTranslation;
@@ -30,52 +34,35 @@ import datawave.query.cypher.planner.CypherPlan;
 import datawave.query.cypher.planner.CypherPlanner;
 import datawave.query.cypher.transformer.CypherQueryTransformer;
 import datawave.query.cypher.transformer.CypherRow;
-import datawave.query.iterator.filter.EdgeFilterIterator;
-import datawave.query.util.QueryScannerHelper;
 
 /**
- * The M1 single-hop Cypher query logic. Bridges the Cypher front-end
- * (parser + AST + semantic analyzer) and planner with DataWave's
- * {@link BaseQueryLogic} lifecycle.
+ * Cypher query logic for M2: multi-hop MATCH, WITH, ORDER BY, SKIP, DISTINCT.
  *
  * <p>Lifecycle:
  * <ol>
- *   <li>{@link #initialize}: parses the Cypher text, runs the planner and
- *       hop translator against the configured {@link GraphSchema}, and
- *       stashes the plan + translation in the returned
- *       {@link CypherQueryConfiguration}.</li>
- *   <li>{@link #setupQuery}: opens a BatchScanner over the edge table with
- *       the translated ranges, attaches an
- *       {@link EdgeFilterIterator} carrying the synthesized JEXL filter,
- *       and (if the plan has a LIMIT) bounds the result iterator.</li>
- *   <li>{@link #getTransformer}: returns a
- *       {@link CypherQueryTransformer} that materializes
- *       {@link CypherRow rows} from each edge cell.</li>
+ *   <li>{@link #initialize}: parses the Cypher text, runs the planner to
+ *       produce a {@link CypherPlan}, pre-translates all hops, and stores
+ *       both in the returned {@link CypherQueryConfiguration}.</li>
+ *   <li>{@link #setupQuery}: runs the full hop chain via
+ *       {@link MultiHopExecutor} (in-memory join for multi-hop), applies
+ *       DISTINCT / ORDER BY / SKIP post-processing, serialises the result
+ *       list as synthetic {@code Entry<Key,Value>} entries, and wraps with
+ *       LIMIT if requested.</li>
+ *   <li>{@link #getTransformer}: returns a {@link CypherQueryTransformer}
+ *       that projects RETURN columns from each {@link PathTuple}.</li>
  * </ol>
  *
- * <p>Production Spring wiring (a {@code CypherQuery} bean in
- * {@code QueryLogicFactory.xml}) is intentionally deferred to M4 along
- * with the rest of the production-readiness work; M1 wires this logic
- * directly in test/demo code.
+ * <p>Production Spring wiring is deferred to M4.
  */
 public class CypherQueryLogic extends BaseQueryLogic<Map.Entry<Key,Value>> {
 
-    /** Where the Spring XML graph-schema descriptor lives on the classpath. */
     public static final String DEFAULT_SCHEMA_RESOURCE = "config/cypher-graph-schema.xml";
-
-    private static final int FILTER_PRIORITY = 130;
 
     private String graphSchemaResource = DEFAULT_SCHEMA_RESOURCE;
     private GraphSchema graphSchema;
     private int queryThreads = 8;
+    private ShardEnrichmentService enrichmentService;
 
-    /**
-     * Typed view of the active query configuration. Populated by
-     * {@link #initialize}; consulted by {@link #setupQuery} and
-     * {@link #getTransformer}. BaseQueryLogic's {@link #getConfig()} returns
-     * the {@link GenericQueryConfiguration} slice; the typed fields
-     * (plan, hop translation) live here.
-     */
     private CypherQueryConfiguration activeConfig;
 
     public CypherQueryLogic() {
@@ -87,6 +74,7 @@ public class CypherQueryLogic extends BaseQueryLogic<Map.Entry<Key,Value>> {
         this.graphSchemaResource = other.graphSchemaResource;
         this.graphSchema = other.graphSchema;
         this.queryThreads = other.queryThreads;
+        this.enrichmentService = other.enrichmentService;
     }
 
     @Override
@@ -101,7 +89,14 @@ public class CypherQueryLogic extends BaseQueryLogic<Map.Entry<Key,Value>> {
 
         CypherFrontEnd.Analysis analysis = new CypherFrontEnd().analyze(cypherText);
         CypherPlan plan = new CypherPlanner(graphSchema).plan(analysis);
-        HopTranslation translation = new HopTranslator().translate(plan.getHop());
+
+        // Pre-translate all hops using the plan's literal identity filters.
+        // Hops after the first will be re-translated at scan time with frontier values.
+        HopTranslator translator = new HopTranslator();
+        List<HopTranslation> translations = new ArrayList<>();
+        for (int i = 0; i < plan.getHops().size(); i++) {
+            translations.add(translator.translate(plan.getHops().get(i)));
+        }
 
         CypherQueryConfiguration cfg = new CypherQueryConfiguration();
         cfg.copyFrom(super.getConfig());
@@ -114,7 +109,7 @@ public class CypherQueryLogic extends BaseQueryLogic<Map.Entry<Key,Value>> {
         cfg.setTableName(getTableName());
         cfg.setCypherText(cypherText);
         cfg.setPlan(plan);
-        cfg.setHopTranslation(translation);
+        cfg.setHopTranslations(translations);
 
         this.activeConfig = cfg;
         return cfg;
@@ -134,23 +129,39 @@ public class CypherQueryLogic extends BaseQueryLogic<Map.Entry<Key,Value>> {
             auths = Collections.singleton(Authorizations.EMPTY);
         }
 
-        BatchScanner batchScanner = QueryScannerHelper.createBatchScanner(client, cfg.getTableName(), auths, queryThreads, cfg.getQuery());
-        batchScanner.setRanges(cfg.getHopTranslation().getRanges());
+        CypherPlan plan = cfg.getPlan();
 
-        IteratorSetting filter = new IteratorSetting(FILTER_PRIORITY, EdgeFilterIterator.class.getSimpleName() + "_" + FILTER_PRIORITY,
-                        EdgeFilterIterator.class);
-        filter.addOption(EdgeFilterIterator.JEXL_OPTION, cfg.getHopTranslation().getFilterJexl());
-        filter.addOption(EdgeFilterIterator.PROTOBUF_OPTION, "TRUE");
-        filter.addOption(EdgeFilterIterator.INCLUDE_STATS_OPTION, "FALSE");
-        batchScanner.addScanIterator(filter);
+        MultiHopExecutor executor = new MultiHopExecutor(client, auths, cfg.getTableName(), queryThreads, cfg.getQuery(),
+                        new HopTranslator(), enrichmentService);
 
-        this.scanner = batchScanner;
-        Iterator<Map.Entry<Key,Value>> it = batchScanner.iterator();
-        if (cfg.getPlan().getLimitBoxed().isPresent()) {
-            long lim = cfg.getPlan().getLimitBoxed().get();
+        List<PathTuple> results = executor.execute(plan, cfg.getHopTranslations());
+        cfg.setResultTuples(results);
+
+        // Convert PathTuple list to synthetic Entry<Key,Value> iterator.
+        List<Map.Entry<Key,Value>> entries = buildSyntheticEntries(results);
+        Iterator<Map.Entry<Key,Value>> it = entries.iterator();
+
+        if (plan.getLimitBoxed().isPresent()) {
+            long lim = plan.getLimitBoxed().get();
             it = Iterators.limit(it, (int) Math.min(Integer.MAX_VALUE, lim));
         }
+
         this.iterator = it;
+    }
+
+    /**
+     * Encodes each {@link PathTuple} as a synthetic {@code Entry<Key,Value>}
+     * where the row key is the tuple index and the value carries the
+     * serialized tuple bytes.
+     */
+    private List<Map.Entry<Key,Value>> buildSyntheticEntries(List<PathTuple> tuples) {
+        List<Map.Entry<Key,Value>> out = new ArrayList<>(tuples.size());
+        for (PathTuple t : tuples) {
+            Key k = new Key(Integer.toString(out.size()));
+            Value v = new Value(t.toBytes());
+            out.add(new AbstractMap.SimpleImmutableEntry<>(k, v));
+        }
+        return out;
     }
 
     @Override
@@ -159,7 +170,7 @@ public class CypherQueryLogic extends BaseQueryLogic<Map.Entry<Key,Value>> {
         if (cfg == null) {
             throw new IllegalStateException("getTransformer() called before initialize()/setupQuery()");
         }
-        return new CypherQueryTransformer(settings, this.markingFunctions, cfg.getAuthorizations(), cfg.getPlan(), cfg.getHopTranslation());
+        return new CypherQueryTransformer(settings, this.markingFunctions, cfg.getAuthorizations(), cfg.getPlan());
     }
 
     @Override
@@ -180,9 +191,19 @@ public class CypherQueryLogic extends BaseQueryLogic<Map.Entry<Key,Value>> {
             graphSchema = GraphSchemaLoader.load(graphSchemaResource);
         }
         CypherPlan plan = new CypherPlanner(graphSchema).plan(analysis);
-        HopTranslation translation = new HopTranslator().translate(plan.getHop());
-        return "Cypher hop ranges=" + translation.getRanges() + " filter=" + translation.getFilterJexl()
-                        + " swap=" + translation.isSwappedEndpoints();
+        HopTranslator translator = new HopTranslator();
+        StringBuilder sb = new StringBuilder("Cypher plan: ").append(plan.getHops().size()).append(" hop(s)\n");
+        for (int i = 0; i < plan.getHops().size(); i++) {
+            HopTranslation t = translator.translate(plan.getHops().get(i));
+            sb.append("  hop ").append(i).append(": ranges=").append(t.getRanges())
+                            .append(" filter=").append(t.getFilterJexl())
+                            .append(" swap=").append(t.isSwappedEndpoints()).append('\n');
+        }
+        sb.append("  distinct=").append(plan.isDistinct())
+                        .append(" orderBy=").append(plan.getOrderBy().size()).append(" item(s)")
+                        .append(" skip=").append(plan.getSkipBoxed().orElse(0L))
+                        .append(" limit=").append(plan.getLimitBoxed().orElse(null));
+        return sb.toString();
     }
 
     @Override
@@ -199,8 +220,11 @@ public class CypherQueryLogic extends BaseQueryLogic<Map.Entry<Key,Value>> {
     public Set<String> getExampleQueries() {
         Set<String> s = new HashSet<>();
         s.add("MATCH (a:Actor {name:'jerry seinfeld'})-[:COSTAR_OF]-(b:Actor) RETURN b.name AS costar LIMIT 10");
+        s.add("MATCH (a:Actor {name:'jerry seinfeld'})-[:COSTAR_OF]-(b:Actor)-[:COSTAR_OF]-(c:Actor) RETURN DISTINCT c.name AS name");
         return s;
     }
+
+    // ---- Spring setters -------------------------------------------------
 
     public String getGraphSchemaResource() {
         return graphSchemaResource;
@@ -224,5 +248,13 @@ public class CypherQueryLogic extends BaseQueryLogic<Map.Entry<Key,Value>> {
 
     public void setQueryThreads(int queryThreads) {
         this.queryThreads = queryThreads;
+    }
+
+    public ShardEnrichmentService getEnrichmentService() {
+        return enrichmentService;
+    }
+
+    public void setEnrichmentService(ShardEnrichmentService enrichmentService) {
+        this.enrichmentService = enrichmentService;
     }
 }
