@@ -21,10 +21,10 @@ import java.util.Set;
 public final class PathTuple {
 
     /** ASCII unit-separator — between key and value within one pair. */
-    static final char KV_SEP = '';
+    static final char KV_SEP = '\u001F';
 
     /** ASCII record-separator — between key-value pairs. */
-    static final char PAIR_SEP = '';
+    static final char PAIR_SEP = '\u001E';
 
     private static final PathTuple EMPTY = new PathTuple(Collections.emptyMap());
 
