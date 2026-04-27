@@ -81,12 +81,15 @@ public final class MultiHopExecutor {
      * (DISTINCT + ORDER BY + SKIP applied; LIMIT is applied by the caller).
      *
      * @param plan the logical plan
-     * @param initialTranslations one pre-built {@link HopTranslation} per hop
-     *        (built from the plan's literal filters; subsequent hops are
-     *        re-translated with frontier values at runtime)
+     * @param initialTranslations the pre-built {@link HopTranslation} for the
+     *        first hop (built from the plan's literal filters); subsequent hops
+     *        are translated at runtime using the current frontier values
      */
     public List<PathTuple> execute(CypherPlan plan, List<HopTranslation> initialTranslations) throws Exception {
         List<HopSpec> hops = plan.getHops();
+        if (!hops.isEmpty() && (initialTranslations == null || initialTranslations.isEmpty())) {
+            throw new IllegalArgumentException("initialTranslations must contain the first hop translation when the plan has hops");
+        }
         List<PathTuple> current = new ArrayList<>();
 
         for (int i = 0; i < hops.size(); i++) {
