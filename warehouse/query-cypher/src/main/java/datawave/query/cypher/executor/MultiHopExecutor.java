@@ -103,13 +103,17 @@ public final class MultiHopExecutor {
             if (i == 0) {
                 translation = initialTranslations.get(0);
             } else {
+                // Short-circuit: if no results so far, nothing to expand.
+                if (current.isEmpty()) {
+                    return new ArrayList<>();
+                }
                 // Determine the junction variable: the endpoint of this hop that is
                 // already bound in the previous tuples. It can be either the source
                 // or sink of the current hop (e.g. (a)-[:R]->(b)<-[:R]-(c) where
                 // hop 1 has source=c, sink=b and b is the junction from hop 0).
                 String hopSourceVar = hop.getSource().getVariable();
                 String hopSinkVar = hop.getSink().getVariable();
-                Set<String> prevBoundVars = current.isEmpty() ? new LinkedHashSet<>() : current.get(0).keys();
+                Set<String> prevBoundVars = current.get(0).keys();  // current is non-empty
 
                 boolean junctionIsHopSource;
                 if (prevBoundVars.contains(hopSourceVar)) {
