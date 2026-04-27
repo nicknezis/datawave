@@ -21,8 +21,8 @@ import datawave.query.cypher.planner.CypherPlan;
  * {@link MultiHopExecutor}; a concrete production implementation will be added
  * in a later PR.  Callers that set up the executor with a {@code null}
  * enrichment service will receive an {@link IllegalStateException} if
- * {@link Projection.Kind#NODE_SHARD_PROPERTY} projections are present in the
- * plan.
+ * {@link datawave.query.cypher.planner.Projection.Kind#NODE_SHARD_PROPERTY}
+ * projections are present in the plan.
  *
  * @see MultiHopExecutor
  */
