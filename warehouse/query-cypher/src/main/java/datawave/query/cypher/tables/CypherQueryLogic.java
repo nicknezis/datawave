@@ -41,8 +41,10 @@ import datawave.query.cypher.transformer.CypherRow;
  * <p>Lifecycle:
  * <ol>
  *   <li>{@link #initialize}: parses the Cypher text, runs the planner to
- *       produce a {@link CypherPlan}, pre-translates all hops, and stores
- *       both in the returned {@link CypherQueryConfiguration}.</li>
+ *       produce a {@link CypherPlan}, pre-translates hop 0, and stores the
+ *       plan and initial translation in the returned
+ *       {@link CypherQueryConfiguration}; later hops are translated during
+ *       frontier execution at runtime.</li>
  *   <li>{@link #setupQuery}: runs the full hop chain via
  *       {@link MultiHopExecutor} (in-memory join for multi-hop), applies
  *       DISTINCT / ORDER BY / SKIP post-processing, serialises the result
