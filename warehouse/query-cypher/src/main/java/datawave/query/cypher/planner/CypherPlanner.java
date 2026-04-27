@@ -90,13 +90,13 @@ public final class CypherPlanner {
         // Ordered list of hop specs built from all MATCH patterns.
         List<HopSpec> allHops = new ArrayList<>();
 
-        processReadingClauses(sq.getReadingClauses(), nodeContexts, relContexts, allHops);
+        Set<String> returnScope = processReadingClauses(sq.getReadingClauses(), nodeContexts, relContexts, allHops);
 
         if (allHops.isEmpty()) {
             throw new CypherUnsupportedException("query must contain at least one MATCH clause with a relationship pattern");
         }
 
-        List<Projection> projections = buildProjections(ret, nodeContexts, relContexts, allHops);
+        List<Projection> projections = buildProjections(ret, nodeContexts, relContexts, allHops, returnScope);
         Long limit = readLimitValue(ret);
         Long skip = readSkipValue(ret);
         boolean distinct = ret.isDistinct();
@@ -107,15 +107,39 @@ public final class CypherPlanner {
 
     // ---- reading-clause processing --------------------------------------
 
-    private void processReadingClauses(List<ReadingClause> clauses, Map<String,NodeContext> nodeContexts,
+    /**
+     * Processes all reading clauses, building the hop list and node/rel contexts.
+     * Returns the set of node variables that are in scope at the end (i.e., at
+     * the RETURN clause). A WITH clause restricts scope to its projected variables;
+     * a subsequent MATCH adds newly introduced variables to the scope.
+     */
+    private Set<String> processReadingClauses(List<ReadingClause> clauses, Map<String,NodeContext> nodeContexts,
                     Map<String,RelMapping> relContexts, List<HopSpec> allHops) {
+        Set<String> returnScope = new LinkedHashSet<>();
         for (ReadingClause rc : clauses) {
             if (rc instanceof MatchClause) {
+                Set<String> before = new LinkedHashSet<>(nodeContexts.keySet());
                 processMatchClause((MatchClause) rc, nodeContexts, relContexts, allHops);
+                // Add newly introduced node variables to the current return scope.
+                for (String var : nodeContexts.keySet()) {
+                    if (!before.contains(var)) {
+                        returnScope.add(var);
+                    }
+                }
             } else if (rc instanceof WithClause) {
                 processWithClause((WithClause) rc, nodeContexts);
+                // WITH restricts scope to only the projected node variables.
+                returnScope.clear();
+                for (ProjectionItem item : ((WithClause) rc).getProjections()) {
+                    item.getExposedName().ifPresent(name -> {
+                        if (nodeContexts.containsKey(name)) {
+                            returnScope.add(name);
+                        }
+                    });
+                }
             }
         }
+        return returnScope;
     }
 
     private void processMatchClause(MatchClause match, Map<String,NodeContext> nodeContexts,
@@ -453,9 +477,9 @@ public final class CypherPlanner {
     // ---- RETURN processing ----------------------------------------------
 
     private List<Projection> buildProjections(ReturnClause ret, Map<String,NodeContext> nodeContexts,
-                    Map<String,RelMapping> relContexts, List<HopSpec> hops) {
+                    Map<String,RelMapping> relContexts, List<HopSpec> hops, Set<String> returnScope) {
         if (ret.isProjectAll()) {
-            return buildProjectionsForStar(nodeContexts);
+            return buildProjectionsForStar(nodeContexts, returnScope);
         }
         if (ret.getProjections().isEmpty()) {
             throw new CypherUnsupportedException("RETURN must list at least one projection");
@@ -503,12 +527,18 @@ public final class CypherPlanner {
         return out;
     }
 
-    /** Expands {@code RETURN *} to all bound node identity projections. */
-    private List<Projection> buildProjectionsForStar(Map<String,NodeContext> nodeContexts) {
+    /**
+     * Expands {@code RETURN *} to all bound node identity projections that are
+     * in scope at the RETURN clause. Variables that were dropped by a WITH clause
+     * (i.e., not in {@code returnScope}) are excluded.
+     */
+    private List<Projection> buildProjectionsForStar(Map<String,NodeContext> nodeContexts, Set<String> returnScope) {
         List<Projection> out = new ArrayList<>();
         for (NodeContext ctx : nodeContexts.values()) {
-            String alias = ctx.variable + "_" + ctx.mapping.getIdentityProperty();
-            out.add(new Projection(alias, ctx.variable, ctx.mapping.getIdentityProperty(), Projection.Kind.NODE_PROPERTY));
+            if (returnScope.contains(ctx.variable)) {
+                String alias = ctx.variable + "_" + ctx.mapping.getIdentityProperty();
+                out.add(new Projection(alias, ctx.variable, ctx.mapping.getIdentityProperty(), Projection.Kind.NODE_PROPERTY));
+            }
         }
         return out;
     }

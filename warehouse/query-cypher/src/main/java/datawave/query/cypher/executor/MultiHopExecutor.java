@@ -25,6 +25,7 @@ import datawave.query.cypher.mapping.RelMapping;
 import datawave.query.cypher.physical.HopTranslation;
 import datawave.query.cypher.physical.HopTranslator;
 import datawave.query.cypher.planner.CypherPlan;
+import datawave.query.cypher.planner.CypherUnsupportedException;
 import datawave.query.cypher.planner.HopSpec;
 import datawave.query.cypher.planner.NodeBinding;
 import datawave.query.cypher.planner.Projection;
@@ -95,25 +96,53 @@ public final class MultiHopExecutor {
         for (int i = 0; i < hops.size(); i++) {
             HopSpec hop = hops.get(i);
             HopTranslation translation;
+            // The shared variable connecting this hop to the previous results.
+            // Determined for i > 0; null for the first hop.
+            String junctionVar = null;
 
             if (i == 0) {
                 translation = initialTranslations.get(0);
             } else {
-                // Build frontier from previous results.
-                String junctionVar = hop.getSource().getVariable();
+                // Determine the junction variable: the endpoint of this hop that is
+                // already bound in the previous tuples. It can be either the source
+                // or sink of the current hop (e.g. (a)-[:R]->(b)<-[:R]-(c) where
+                // hop 1 has source=c, sink=b and b is the junction from hop 0).
+                String hopSourceVar = hop.getSource().getVariable();
+                String hopSinkVar = hop.getSink().getVariable();
+                Set<String> prevBoundVars = current.isEmpty() ? new LinkedHashSet<>() : current.get(0).keys();
+
+                boolean junctionIsHopSource;
+                if (prevBoundVars.contains(hopSourceVar)) {
+                    junctionVar = hopSourceVar;
+                    junctionIsHopSource = true;
+                } else if (prevBoundVars.contains(hopSinkVar)) {
+                    junctionVar = hopSinkVar;
+                    junctionIsHopSource = false;
+                } else {
+                    throw new CypherUnsupportedException("hop " + i + " shares no variable with the prior results; "
+                                    + "disconnected patterns are not supported in M2");
+                }
+
                 Set<String> frontier = buildFrontier(current, junctionVar);
-                // Intersect with any literal identity filters on the hop source
-                // (e.g., from WITH WHERE or inline node properties on the junction
-                // variable), so that paths through disallowed junction values are
-                // not expanded.
-                Map<String,String> srcIdentityEquals = hop.getSource().getIdentityEquals();
-                if (!srcIdentityEquals.isEmpty()) {
-                    frontier.retainAll(srcIdentityEquals.values());
+                // Intersect with any literal identity filters on the junction endpoint
+                // (e.g., from WITH WHERE or inline node properties), so that paths
+                // through disallowed junction values are not expanded.
+                NodeBinding junctionBinding = junctionIsHopSource ? hop.getSource() : hop.getSink();
+                Map<String,String> junctionIdentityEquals = junctionBinding.getIdentityEquals();
+                if (!junctionIdentityEquals.isEmpty()) {
+                    frontier.retainAll(junctionIdentityEquals.values());
                 }
                 if (frontier.isEmpty()) {
                     return new ArrayList<>();
                 }
-                translation = hopTranslator.translate(hop, frontier);
+
+                if (junctionIsHopSource) {
+                    translation = hopTranslator.translate(hop, frontier);
+                } else {
+                    // Junction is the sink of this hop: use sink-frontier translation.
+                    // This requires an undirected relationship (throws otherwise).
+                    translation = hopTranslator.translateWithSinkFrontier(hop, frontier);
+                }
             }
 
             List<Map.Entry<Key,Value>> edgeRows = scanEdges(translation);
@@ -126,7 +155,6 @@ public final class MultiHopExecutor {
                     }
                 }
             } else {
-                String junctionVar = hop.getSource().getVariable();
                 Map<String,List<PathTuple>> index = buildIndex(current, junctionVar);
                 List<PathTuple> expanded = new ArrayList<>();
                 for (Map.Entry<Key,Value> row : edgeRows) {
