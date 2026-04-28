@@ -241,15 +241,8 @@ public final class CypherPlanner {
 
         // Apply WHERE to populate identity / shard filters on node contexts.
         match.getWhere().ifPresent(where -> {
-            Set<String> matchVars = new LinkedHashSet<>();
-            for (NodePattern np : nodes) {
-                np.getVariable().ifPresent(matchVars::add);
-            }
-            for (RelationshipPattern rel : rels) {
-                rel.getVariable().ifPresent(matchVars::add);
-            }
             for (Expression term : conjuncts(where)) {
-                applyWhereTerm(term, nodeContexts, relContexts, matchVars, allHops);
+                applyWhereTerm(term, nodeContexts, relContexts, allHops);
             }
         });
 
@@ -338,7 +331,7 @@ public final class CypherPlanner {
     // ---- WHERE processing -----------------------------------------------
 
     private void applyWhereTerm(Expression term, Map<String,NodeContext> nodeContexts, Map<String,RelMapping> relContexts,
-                    Set<String> matchVars, List<HopSpec> hops) {
+                    List<HopSpec> hops) {
         if (term instanceof UnaryExpression) {
             throw new CypherUnsupportedException("WHERE: NOT is not supported in M2");
         }
