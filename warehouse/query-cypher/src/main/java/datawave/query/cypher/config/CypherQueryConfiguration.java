@@ -1,17 +1,25 @@
 package datawave.query.cypher.config;
 
+import java.util.Collections;
+import java.util.List;
+
 import datawave.core.query.configuration.GenericQueryConfiguration;
 import datawave.core.query.logic.BaseQueryLogic;
+import datawave.query.cypher.executor.PathTuple;
 import datawave.query.cypher.physical.HopTranslation;
 import datawave.query.cypher.planner.CypherPlan;
 
 /**
  * Carries the planned-and-translated artifacts for a Cypher query through
  * the {@code initialize()} → {@code setupQuery()} → {@code getTransformer()}
- * lifecycle. The plan and translation are populated by
+ * lifecycle.
+ *
+ * <p>The plan and hop translations are populated by
  * {@code CypherQueryLogic.initialize()} and consumed by both
- * {@code setupQuery} (for ranges + filter JEXL) and the transformer (for
- * projection metadata + endpoint-swap awareness).
+ * {@code setupQuery()} (for ranges + filter JEXL) and the transformer (for
+ * projection metadata). The result tuples are populated by
+ * {@code setupQuery()} (after the full hop chain executes) and consumed by
+ * the transformer.
  */
 public class CypherQueryConfiguration extends GenericQueryConfiguration {
 
@@ -23,8 +31,19 @@ public class CypherQueryConfiguration extends GenericQueryConfiguration {
     /** Resolved logical plan (transient — rebuilt on resume). */
     private transient CypherPlan plan;
 
-    /** Translated physical hop (transient — derived from the plan). */
-    private transient HopTranslation hopTranslation;
+    /**
+     * One pre-built translation per hop (index 0 = first hop).
+     * Subsequent hops are re-translated at scan time with frontier values.
+     * Transient — derived from the plan.
+     */
+    private transient List<HopTranslation> hopTranslations = Collections.emptyList();
+
+    /**
+     * Fully post-processed result tuples (after multi-hop join, enrichment,
+     * DISTINCT, ORDER BY, SKIP). Populated by {@code setupQuery()} and
+     * consumed by the iterator + transformer. Transient.
+     */
+    private transient List<PathTuple> resultTuples = Collections.emptyList();
 
     public CypherQueryConfiguration() {
         super();
@@ -38,7 +57,8 @@ public class CypherQueryConfiguration extends GenericQueryConfiguration {
         super(other);
         this.cypherText = other.cypherText;
         this.plan = other.plan;
-        this.hopTranslation = other.hopTranslation;
+        this.hopTranslations = other.hopTranslations;
+        this.resultTuples = other.resultTuples;
     }
 
     public String getCypherText() {
@@ -57,11 +77,35 @@ public class CypherQueryConfiguration extends GenericQueryConfiguration {
         this.plan = plan;
     }
 
-    public HopTranslation getHopTranslation() {
-        return hopTranslation;
+    public List<HopTranslation> getHopTranslations() {
+        return hopTranslations;
     }
 
+    public void setHopTranslations(List<HopTranslation> hopTranslations) {
+        this.hopTranslations = hopTranslations == null ? Collections.emptyList() : Collections.unmodifiableList(hopTranslations);
+    }
+
+    /**
+     * @deprecated use {@link #getHopTranslations()} and {@link #setHopTranslations}
+     */
+    @Deprecated
+    public HopTranslation getHopTranslation() {
+        return hopTranslations.isEmpty() ? null : hopTranslations.get(0);
+    }
+
+    /**
+     * @deprecated use {@link #setHopTranslations}
+     */
+    @Deprecated
     public void setHopTranslation(HopTranslation hopTranslation) {
-        this.hopTranslation = hopTranslation;
+        setHopTranslations(hopTranslation == null ? Collections.emptyList() : Collections.singletonList(hopTranslation));
+    }
+
+    public List<PathTuple> getResultTuples() {
+        return resultTuples;
+    }
+
+    public void setResultTuples(List<PathTuple> resultTuples) {
+        this.resultTuples = resultTuples == null ? Collections.emptyList() : Collections.unmodifiableList(resultTuples);
     }
 }

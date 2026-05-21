@@ -4,18 +4,26 @@ import java.util.Objects;
 
 /**
  * One column in the RETURN clause, resolved to its bound variable, the
- * property name (or null when projecting the bound entity itself), and the
- * exposed alias.
+ * property name, and the exposed alias.
  *
- * In M1 only property projections of node identity properties and edge
- * attributes are honored; node bindings without a property and arbitrary
- * expressions are rejected at plan time.
+ * <p>{@link Kind} distinguishes how the value is sourced:
+ * <ul>
+ *   <li>{@link Kind#NODE_PROPERTY} — the node identity property, read
+ *       directly from the edge row SOURCE/SINK; no shard lookup needed.</li>
+ *   <li>{@link Kind#NODE_SHARD_PROPERTY} — a non-identity node property
+ *       that requires a shard-table lookup via ShardEnrichmentService.</li>
+ *   <li>{@link Kind#REL_PROPERTY} — an edge attribute slot value, read
+ *       from the edge column qualifier.</li>
+ * </ul>
  */
 public final class Projection {
 
-    /** What kind of bound entity the projection's variable refers to. */
     public enum Kind {
+        /** Node identity property (edge SOURCE/SINK). No shard lookup needed. */
         NODE_PROPERTY,
+        /** Non-identity node property requiring shard enrichment. */
+        NODE_SHARD_PROPERTY,
+        /** Edge attribute slot value from the edge column qualifier. */
         REL_PROPERTY
     }
 
