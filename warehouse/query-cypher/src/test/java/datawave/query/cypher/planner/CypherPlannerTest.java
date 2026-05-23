@@ -81,12 +81,8 @@ public class CypherPlannerTest {
         assertThat(showProj.getKind()).isEqualTo(Projection.Kind.REL_PROPERTY);
     }
 
-    @Test
-    public void rejectsAggregationProjection() {
-        assertThatThrownBy(() -> planner.plan(frontEnd
-                        .analyze("MATCH (a:Actor {name:'jerry'})-[:COSTAR_OF]-(b:Actor) RETURN count(b) AS n"))).isInstanceOf(CypherUnsupportedException.class)
-                                        .hasMessageContaining("property projections");
-    }
+    // M2 used to reject aggregation; M3 accepts it — covered by acceptsAggregateProjection
+    // below.
 
     // ---- M2: multi-hop -------------------------------------------------------
 
@@ -208,27 +204,82 @@ public class CypherPlannerTest {
         assertThat(hop.getSink().requiresShardEnrichment()).isTrue();
     }
 
-    // ---- M2: still-deferred features -----------------------------------------
+    // ---- M3: variable-length, aggregation, path binding ---------------------
 
     @Test
-    public void variableLengthStillRejected() {
+    public void plansVariableLengthRelWithBounds() {
+        CypherPlan plan = planner.plan(frontEnd.analyze(
+                        "MATCH (a:Actor {name:'jerry'})-[:COSTAR_OF*1..3]-(b:Actor) RETURN b.name AS x"));
+        HopSpec hop = plan.getFirstHop();
+        assertThat(hop.isVariableLength()).isTrue();
+        assertThat(hop.getLower()).hasValue(1);
+        assertThat(hop.getUpper()).hasValue(3);
+    }
+
+    @Test
+    public void plansPathVariablePattern() {
+        CypherPlan plan = planner.plan(frontEnd.analyze(
+                        "MATCH p = (a:Actor {name:'jerry'})-[:COSTAR_OF]-(b:Actor) RETURN p AS path"));
+        assertThat(plan.getProjections()).hasSize(1);
+        Projection p = plan.getProjections().get(0);
+        assertThat(p.getKind()).isEqualTo(Projection.Kind.PATH_OBJECT);
+        assertThat(p.getAlias()).isEqualTo("path");
+        assertThat(p.getVariable()).isEqualTo("p");
+        assertThat(plan.getFirstHop().getPathVariable()).hasValue("p");
+    }
+
+    @Test
+    public void plansCountStarAggregate() {
+        CypherPlan plan = planner.plan(frontEnd.analyze(
+                        "MATCH (a:Actor {name:'jerry'})-[:COSTAR_OF]-(b:Actor) RETURN count(*) AS n"));
+        assertThat(plan.getGroupingSpec()).isPresent();
+        assertThat(plan.getGroupingSpec().get().getGroupByKeys()).isEmpty();
+        assertThat(plan.getGroupingSpec().get().getAggregates()).hasSize(1);
+        AggregateSpec spec = plan.getGroupingSpec().get().getAggregates().get(0).getAggregateSpec().orElseThrow();
+        assertThat(spec.getFunc()).isEqualTo(AggregateSpec.Func.COUNT_STAR);
+        assertThat(spec.isDistinct()).isFalse();
+    }
+
+    @Test
+    public void plansAggregateWithImplicitGroupBy() {
+        CypherPlan plan = planner.plan(frontEnd.analyze(
+                        "MATCH (a:Actor)-[:COSTAR_OF]-(b:Actor) WHERE a.name = 'jerry' RETURN a.name AS actor, count(b) AS n"));
+        assertThat(plan.getGroupingSpec()).isPresent();
+        assertThat(plan.getGroupingSpec().get().getGroupByKeys()).hasSize(1);
+        assertThat(plan.getGroupingSpec().get().getGroupByKeys().get(0).getAlias()).isEqualTo("actor");
+        assertThat(plan.getGroupingSpec().get().getAggregates()).hasSize(1);
+        assertThat(plan.getGroupingSpec().get().getAggregates().get(0).getAlias()).isEqualTo("n");
+    }
+
+    @Test
+    public void plansCountDistinctAggregate() {
+        CypherPlan plan = planner.plan(frontEnd.analyze(
+                        "MATCH (a:Actor {name:'jerry'})-[:COSTAR_OF]-(b:Actor) RETURN count(DISTINCT b.name) AS n"));
+        AggregateSpec spec = plan.getGroupingSpec().orElseThrow().getAggregates().get(0).getAggregateSpec().orElseThrow();
+        assertThat(spec.getFunc()).isEqualTo(AggregateSpec.Func.COUNT);
+        assertThat(spec.isDistinct()).isTrue();
+    }
+
+    @Test
+    public void rejectsUnboundedVarLengthAboveCap() {
+        planner.setMaxVariableLengthUpper(3);
         assertThatThrownBy(() -> planner.plan(frontEnd.analyze(
-                        "MATCH (a:Actor {name:'jerry'})-[:COSTAR_OF*1..3]-(b:Actor) RETURN b.name AS x")))
+                        "MATCH (a:Actor {name:'jerry'})-[:COSTAR_OF*1..10]-(b:Actor) RETURN b.name AS x")))
+                                        .isInstanceOf(CypherUnsupportedException.class).hasMessageContaining("exceeds the configured cap");
+    }
+
+    @Test
+    public void rejectsZeroLowerVarLength() {
+        assertThatThrownBy(() -> planner.plan(frontEnd.analyze(
+                        "MATCH (a:Actor {name:'jerry'})-[:COSTAR_OF*0..3]-(b:Actor) RETURN b.name AS x")))
+                                        .isInstanceOf(CypherUnsupportedException.class).hasMessageContaining("zero-step");
+    }
+
+    @Test
+    public void rejectsVarLengthRelVarInWhere() {
+        assertThatThrownBy(() -> planner.plan(frontEnd.analyze(
+                        "MATCH (a:Actor {name:'jerry'})-[r:COSTAR_OF*1..2]-(b:Actor) WHERE r.show = 'Curb' RETURN b.name AS x")))
                                         .isInstanceOf(CypherUnsupportedException.class).hasMessageContaining("variable-length");
-    }
-
-    @Test
-    public void aggregationStillRejected() {
-        assertThatThrownBy(() -> planner.plan(frontEnd.analyze(
-                        "MATCH (a:Actor {name:'jerry'})-[:COSTAR_OF]-(b:Actor) RETURN count(b) AS n")))
-                                        .isInstanceOf(CypherUnsupportedException.class).hasMessageContaining("property projections");
-    }
-
-    @Test
-    public void pathBindingStillRejected() {
-        assertThatThrownBy(() -> planner.plan(frontEnd.analyze(
-                        "MATCH p = (a:Actor {name:'jerry'})-[:COSTAR_OF]-(b:Actor) RETURN b.name AS x")))
-                                        .isInstanceOf(CypherUnsupportedException.class).hasMessageContaining("path variable");
     }
 
     // ---- Retained M1 structural checks --------------------------------------

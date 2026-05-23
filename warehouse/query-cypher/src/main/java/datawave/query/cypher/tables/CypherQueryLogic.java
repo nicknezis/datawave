@@ -23,6 +23,7 @@ import datawave.core.query.logic.QueryLogicTransformer;
 import datawave.microservice.query.Query;
 import datawave.query.cypher.CypherFrontEnd;
 import datawave.query.cypher.config.CypherQueryConfiguration;
+import datawave.query.cypher.executor.ExecutorLimits;
 import datawave.query.cypher.executor.MultiHopExecutor;
 import datawave.query.cypher.executor.PathTuple;
 import datawave.query.cypher.executor.ShardEnrichmentService;
@@ -32,6 +33,8 @@ import datawave.query.cypher.physical.HopTranslation;
 import datawave.query.cypher.physical.HopTranslator;
 import datawave.query.cypher.planner.CypherPlan;
 import datawave.query.cypher.planner.CypherPlanner;
+import datawave.query.cypher.planner.HopSpec;
+import datawave.query.cypher.planner.Projection;
 import datawave.query.cypher.transformer.CypherQueryTransformer;
 import datawave.query.cypher.transformer.CypherRow;
 
@@ -65,6 +68,12 @@ public class CypherQueryLogic extends BaseQueryLogic<Map.Entry<Key,Value>> {
     private int queryThreads = 8;
     private ShardEnrichmentService enrichmentService;
 
+    // M3 executor knobs (mirrored onto each CypherQueryConfiguration in initialize()).
+    private int maxVariableLengthUpper = ExecutorLimits.DEFAULTS.getMaxVariableLengthUpper();
+    private int maxFrontierSize = ExecutorLimits.DEFAULTS.getMaxFrontierSize();
+    private int maxAggregateGroups = ExecutorLimits.DEFAULTS.getMaxAggregateGroups();
+    private int maxPathEdgeHistory = ExecutorLimits.DEFAULTS.getMaxPathEdgeHistory();
+
     private CypherQueryConfiguration activeConfig;
 
     public CypherQueryLogic() {
@@ -77,6 +86,10 @@ public class CypherQueryLogic extends BaseQueryLogic<Map.Entry<Key,Value>> {
         this.graphSchema = other.graphSchema;
         this.queryThreads = other.queryThreads;
         this.enrichmentService = other.enrichmentService;
+        this.maxVariableLengthUpper = other.maxVariableLengthUpper;
+        this.maxFrontierSize = other.maxFrontierSize;
+        this.maxAggregateGroups = other.maxAggregateGroups;
+        this.maxPathEdgeHistory = other.maxPathEdgeHistory;
     }
 
     @Override
@@ -90,13 +103,17 @@ public class CypherQueryLogic extends BaseQueryLogic<Map.Entry<Key,Value>> {
         }
 
         CypherFrontEnd.Analysis analysis = new CypherFrontEnd().analyze(cypherText);
-        CypherPlan plan = new CypherPlanner(graphSchema).plan(analysis);
+        CypherPlanner planner = new CypherPlanner(graphSchema);
+        // Reflect any per-logic var-length cap override into the planner before planning.
+        planner.setMaxVariableLengthUpper(maxVariableLengthUpper);
+        CypherPlan plan = planner.plan(analysis);
 
-        // Pre-translate only the first hop using the plan's literal identity filters.
-        // Hops after the first are translated at scan time with frontier values.
+        // Pre-translate only the first hop, and only when it's fixed-length: a
+        // variable-length first hop builds per-step translations from the literal
+        // source-identity frontier inside the executor.
         HopTranslator translator = new HopTranslator();
         List<HopTranslation> translations = new ArrayList<>();
-        if (!plan.getHops().isEmpty()) {
+        if (!plan.getHops().isEmpty() && !plan.getHops().get(0).isVariableLength()) {
             translations.add(translator.translate(plan.getHops().get(0)));
         }
 
@@ -112,6 +129,10 @@ public class CypherQueryLogic extends BaseQueryLogic<Map.Entry<Key,Value>> {
         cfg.setCypherText(cypherText);
         cfg.setPlan(plan);
         cfg.setHopTranslations(translations);
+        cfg.setMaxVariableLengthUpper(maxVariableLengthUpper);
+        cfg.setMaxFrontierSize(maxFrontierSize);
+        cfg.setMaxAggregateGroups(maxAggregateGroups);
+        cfg.setMaxPathEdgeHistory(maxPathEdgeHistory);
 
         this.activeConfig = cfg;
         return cfg;
@@ -133,8 +154,10 @@ public class CypherQueryLogic extends BaseQueryLogic<Map.Entry<Key,Value>> {
 
         CypherPlan plan = cfg.getPlan();
 
+        ExecutorLimits limits = new ExecutorLimits(cfg.getMaxVariableLengthUpper(), cfg.getMaxFrontierSize(), cfg.getMaxAggregateGroups(),
+                        cfg.getMaxPathEdgeHistory());
         MultiHopExecutor executor = new MultiHopExecutor(client, auths, cfg.getTableName(), queryThreads, cfg.getQuery(),
-                        new HopTranslator(), enrichmentService);
+                        new HopTranslator(), enrichmentService, limits);
 
         List<PathTuple> results = executor.execute(plan, cfg.getHopTranslations());
         cfg.setResultTuples(results);
@@ -192,25 +215,44 @@ public class CypherQueryLogic extends BaseQueryLogic<Map.Entry<Key,Value>> {
         if (graphSchema == null) {
             graphSchema = GraphSchemaLoader.load(graphSchemaResource);
         }
-        CypherPlan plan = new CypherPlanner(graphSchema).plan(analysis);
+        CypherPlanner planner = new CypherPlanner(graphSchema);
+        planner.setMaxVariableLengthUpper(maxVariableLengthUpper);
+        CypherPlan plan = planner.plan(analysis);
         HopTranslator translator = new HopTranslator();
         StringBuilder sb = new StringBuilder("Cypher plan: ").append(plan.getHops().size()).append(" hop(s)\n");
         for (int i = 0; i < plan.getHops().size(); i++) {
+            HopSpec hop = plan.getHops().get(i);
             sb.append("  hop ").append(i).append(": ");
-            if (i == 0) {
-                HopTranslation t = translator.translate(plan.getHops().get(i));
-                sb.append("ranges=").append(t.getRanges())
-                                .append(" filter=").append(t.getFilterJexl())
-                                .append(" swap=").append(t.isSwappedEndpoints());
+            if (hop.isVariableLength()) {
+                sb.append("VAR_LENGTH [").append(hop.getLower().getAsInt()).append("..").append(hop.getUpper().getAsInt())
+                                .append("] type=").append(hop.getRel().getCypherType())
+                                .append(" dir=").append(hop.getPatternDirection())
+                                .append(" (frontier-driven per step)");
+                hop.getPathVariable().ifPresent(pv -> sb.append(" path=").append(pv));
+            } else if (i == 0) {
+                HopTranslation t = translator.translate(hop);
+                sb.append("ranges=").append(t.getRanges()).append(" filter=").append(t.getFilterJexl()).append(" swap=").append(t.isSwappedEndpoints());
+                hop.getPathVariable().ifPresent(pv -> sb.append(" path=").append(pv));
             } else {
-                sb.append("frontier-translated at runtime");
+                sb.append("frontier-translated at runtime type=").append(hop.getRel().getCypherType()).append(" dir=").append(hop.getPatternDirection());
+                hop.getPathVariable().ifPresent(pv -> sb.append(" path=").append(pv));
             }
             sb.append('\n');
         }
-        sb.append("  distinct=").append(plan.isDistinct())
-                        .append(" orderBy=").append(plan.getOrderBy().size()).append(" item(s)")
-                        .append(" skip=").append(plan.getSkipBoxed().orElse(0L))
-                        .append(" limit=").append(plan.getLimitBoxed().orElse(null));
+        plan.getGroupingSpec().ifPresent(g -> {
+            sb.append("  grouping: keys=").append(g.getGroupByKeys().size())
+                            .append(" aggregates=[");
+            for (int i = 0; i < g.getAggregates().size(); i++) {
+                if (i > 0) {
+                    sb.append(", ");
+                }
+                Projection ap = g.getAggregates().get(i);
+                sb.append(ap.getAlias()).append("=").append(ap.getAggregateSpec().map(s -> s.getFunc().name()).orElse("?"));
+            }
+            sb.append("]\n");
+        });
+        sb.append("  distinct=").append(plan.isDistinct()).append(" orderBy=").append(plan.getOrderBy().size()).append(" item(s)").append(" skip=")
+                        .append(plan.getSkipBoxed().orElse(0L)).append(" limit=").append(plan.getLimitBoxed().orElse(null));
         return sb.toString();
     }
 
@@ -229,6 +271,9 @@ public class CypherQueryLogic extends BaseQueryLogic<Map.Entry<Key,Value>> {
         Set<String> s = new HashSet<>();
         s.add("MATCH (a:Actor {name:'jerry seinfeld'})-[:COSTAR_OF]-(b:Actor) RETURN b.name AS costar LIMIT 10");
         s.add("MATCH (a:Actor {name:'jerry seinfeld'})-[:COSTAR_OF]-(b:Actor)-[:COSTAR_OF]-(c:Actor) RETURN DISTINCT c.name AS name");
+        s.add("MATCH (a:Actor {name:'jerry seinfeld'})-[:COSTAR_OF*1..3]-(b:Actor) RETURN DISTINCT b.name AS reachable");
+        s.add("MATCH (a:Actor)-[:COSTAR_OF]-(b:Actor) RETURN a.name AS actor, count(b) AS costars ORDER BY costars DESC LIMIT 5");
+        s.add("MATCH p = (a:Actor {name:'jerry seinfeld'})-[:COSTAR_OF*1..2]-(b:Actor) RETURN p LIMIT 5");
         return s;
     }
 
@@ -264,5 +309,37 @@ public class CypherQueryLogic extends BaseQueryLogic<Map.Entry<Key,Value>> {
 
     public void setEnrichmentService(ShardEnrichmentService enrichmentService) {
         this.enrichmentService = enrichmentService;
+    }
+
+    public int getMaxVariableLengthUpper() {
+        return maxVariableLengthUpper;
+    }
+
+    public void setMaxVariableLengthUpper(int maxVariableLengthUpper) {
+        this.maxVariableLengthUpper = maxVariableLengthUpper;
+    }
+
+    public int getMaxFrontierSize() {
+        return maxFrontierSize;
+    }
+
+    public void setMaxFrontierSize(int maxFrontierSize) {
+        this.maxFrontierSize = maxFrontierSize;
+    }
+
+    public int getMaxAggregateGroups() {
+        return maxAggregateGroups;
+    }
+
+    public void setMaxAggregateGroups(int maxAggregateGroups) {
+        this.maxAggregateGroups = maxAggregateGroups;
+    }
+
+    public int getMaxPathEdgeHistory() {
+        return maxPathEdgeHistory;
+    }
+
+    public void setMaxPathEdgeHistory(int maxPathEdgeHistory) {
+        this.maxPathEdgeHistory = maxPathEdgeHistory;
     }
 }

@@ -200,7 +200,7 @@ atom
     ;
 
 functionInvocation
-    : symbolicName LPAREN (DISTINCT)? (expression (COMMA expression)*)? RPAREN
+    : symbolicName LPAREN (DISTINCT)? (STAR | (expression (COMMA expression)*))? RPAREN
     ;
 
 variable

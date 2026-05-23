@@ -28,6 +28,18 @@ public class CypherQueryConfiguration extends GenericQueryConfiguration {
     /** Cypher query text as supplied by the caller. */
     private String cypherText;
 
+    /** Maximum allowed upper bound on a variable-length pattern {@code [*lo..hi]}; bigger queries reject at plan time. */
+    private int maxVariableLengthUpper = 5;
+
+    /** Maximum frontier size at any BFS step; exceeding throws. */
+    private int maxFrontierSize = 100_000;
+
+    /** Maximum number of distinct aggregation groups; exceeding throws (no silent eviction). */
+    private int maxAggregateGroups = 100_000;
+
+    /** Per-path edge-trail history cap inside a single variable-length expansion. */
+    private int maxPathEdgeHistory = 64;
+
     /** Resolved logical plan (transient — rebuilt on resume). */
     private transient CypherPlan plan;
 
@@ -59,6 +71,10 @@ public class CypherQueryConfiguration extends GenericQueryConfiguration {
         this.plan = other.plan;
         this.hopTranslations = other.hopTranslations;
         this.resultTuples = other.resultTuples;
+        this.maxVariableLengthUpper = other.maxVariableLengthUpper;
+        this.maxFrontierSize = other.maxFrontierSize;
+        this.maxAggregateGroups = other.maxAggregateGroups;
+        this.maxPathEdgeHistory = other.maxPathEdgeHistory;
     }
 
     public String getCypherText() {
@@ -107,5 +123,37 @@ public class CypherQueryConfiguration extends GenericQueryConfiguration {
 
     public void setResultTuples(List<PathTuple> resultTuples) {
         this.resultTuples = resultTuples == null ? Collections.emptyList() : Collections.unmodifiableList(resultTuples);
+    }
+
+    public int getMaxVariableLengthUpper() {
+        return maxVariableLengthUpper;
+    }
+
+    public void setMaxVariableLengthUpper(int maxVariableLengthUpper) {
+        this.maxVariableLengthUpper = maxVariableLengthUpper;
+    }
+
+    public int getMaxFrontierSize() {
+        return maxFrontierSize;
+    }
+
+    public void setMaxFrontierSize(int maxFrontierSize) {
+        this.maxFrontierSize = maxFrontierSize;
+    }
+
+    public int getMaxAggregateGroups() {
+        return maxAggregateGroups;
+    }
+
+    public void setMaxAggregateGroups(int maxAggregateGroups) {
+        this.maxAggregateGroups = maxAggregateGroups;
+    }
+
+    public int getMaxPathEdgeHistory() {
+        return maxPathEdgeHistory;
+    }
+
+    public void setMaxPathEdgeHistory(int maxPathEdgeHistory) {
+        this.maxPathEdgeHistory = maxPathEdgeHistory;
     }
 }

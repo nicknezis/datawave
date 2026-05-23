@@ -54,21 +54,50 @@ import datawave.query.cypher.mapping.RelMapping;
  *       post-enrichment by {@link datawave.query.cypher.executor.ShardEnrichmentService}.</li>
  * </ul>
  *
- * <p>Still deferred (with precise rejection messages):
+ * <p>M3 surface (everything above plus):
  * <ul>
- *   <li>Variable-length relationships {@code [*lo..hi]} — M3.</li>
- *   <li>Aggregation functions — M3.</li>
- *   <li>Path variables {@code p = …} — M3.</li>
+ *   <li>Bounded variable-length relationships {@code [*lo..hi]} — lower &gt;= 1,
+ *       upper capped by {@link #DEFAULT_MAX_VARIABLE_LENGTH_UPPER} (or
+ *       {@link #setMaxVariableLengthUpper}).</li>
+ *   <li>Path variables {@code MATCH p = …} — emitted as a
+ *       {@link Projection.Kind#PATH_OBJECT} projection bound to the path
+ *       variable when referenced in RETURN.</li>
+ *   <li>Aggregation in RETURN: {@code count(*)}, {@code count(x)},
+ *       {@code count(DISTINCT x)}, {@code sum(x)}, {@code avg(x)},
+ *       {@code min(x)}, {@code max(x)}. GROUP BY is implicit: non-aggregate
+ *       RETURN items form the grouping key.</li>
+ * </ul>
+ *
+ * <p>Still rejected with precise messages:
+ * <ul>
  *   <li>UNION — unsupported.</li>
  *   <li>OPTIONAL MATCH — unsupported.</li>
+ *   <li>{@code lower == 0} variable-length expansions (zero-step paths deferred).</li>
+ *   <li>Edge-property filters on a variable-length relationship's variable.</li>
  * </ul>
  */
 public final class CypherPlanner {
 
+    /** Default cap on the upper bound of {@code [*lo..hi]} accepted at plan time. */
+    public static final int DEFAULT_MAX_VARIABLE_LENGTH_UPPER = 5;
+
     private final GraphSchema schema;
+    private int maxVariableLengthUpper = DEFAULT_MAX_VARIABLE_LENGTH_UPPER;
 
     public CypherPlanner(GraphSchema schema) {
         this.schema = Objects.requireNonNull(schema, "schema");
+    }
+
+    /** Tighten or relax the cap on {@code [*lo..hi]} upper bounds (>= 1). */
+    public void setMaxVariableLengthUpper(int max) {
+        if (max < 1) {
+            throw new IllegalArgumentException("maxVariableLengthUpper must be >= 1");
+        }
+        this.maxVariableLengthUpper = max;
+    }
+
+    public int getMaxVariableLengthUpper() {
+        return maxVariableLengthUpper;
     }
 
     public CypherPlan plan(Analysis analysis) {
@@ -101,8 +130,9 @@ public final class CypherPlanner {
         Long skip = readSkipValue(ret);
         boolean distinct = ret.isDistinct();
         List<SortSpec> orderBy = buildOrderBy(ret, projections);
+        GroupingSpec grouping = buildGroupingSpec(projections);
 
-        return new CypherPlan(allHops, projections, limit, skip, distinct, orderBy, schema.getVersion());
+        return new CypherPlan(allHops, projections, limit, skip, distinct, orderBy, schema.getVersion(), grouping);
     }
 
     // ---- reading-clause processing --------------------------------------
@@ -151,9 +181,7 @@ public final class CypherPlanner {
             throw new CypherUnsupportedException("M2 supports exactly one pattern per MATCH; multiple comma-separated patterns are deferred to M3");
         }
         Pattern pattern = match.getPatterns().get(0);
-        if (pattern.getPathVariable().isPresent()) {
-            throw new CypherUnsupportedException("path variables (p = ...) are deferred to M3");
-        }
+        String pathVariable = pattern.getPathVariable().orElse(null);
 
         PatternElement element = pattern.getElement();
         List<NodePattern> nodes = element.getNodes();
@@ -191,8 +219,21 @@ public final class CypherPlanner {
             NodePattern leftAst = nodes.get(i);
             NodePattern rightAst = nodes.get(i + 1);
 
+            Integer hopLower = null;
+            Integer hopUpper = null;
             if (rel.isVariableLength()) {
-                throw new CypherUnsupportedException("variable-length relationships [*lo..hi] are deferred to M3");
+                if (!rel.getLower().isPresent() || !rel.getUpper().isPresent()) {
+                    throw new CypherUnsupportedException("variable-length relationships require both lower and upper bounds, e.g. [*1..3]");
+                }
+                hopLower = rel.getLower().getAsInt();
+                hopUpper = rel.getUpper().getAsInt();
+                if (hopLower < 1) {
+                    throw new CypherUnsupportedException("variable-length lower bound must be >= 1; zero-step paths are deferred");
+                }
+                if (hopUpper > maxVariableLengthUpper) {
+                    throw new CypherUnsupportedException("variable-length upper bound " + hopUpper + " exceeds the configured cap of "
+                                    + maxVariableLengthUpper + " (raise CypherPlanner.maxVariableLengthUpper or tighten the query)");
+                }
             }
             if (rel.getTypes().size() != 1) {
                 throw new CypherUnsupportedException("exactly one relationship type is required per hop, e.g. -[:KNOWS]-");
@@ -231,12 +272,15 @@ public final class CypherPlanner {
             rel.getProperties().ifPresent(props -> harvestEdgePropertyEquals(props, relMapping, attrEquals));
 
             if (relVar != null) {
+                // Variable-length rel variables bind a list of relationships rather than
+                // a single edge; we still register them so WHERE/RETURN can produce a
+                // precise error via addAttrEqualToHop / resolveValueProjection.
                 relContexts.put(relVar, relMapping);
             }
 
             NodeBinding sourceBinding = buildNodeBinding(sourceCtx);
             NodeBinding sinkBinding = buildNodeBinding(sinkCtx);
-            allHops.add(new HopSpec(sourceBinding, sinkBinding, relMapping, rel.getDirection(), relVar, attrEquals));
+            allHops.add(new HopSpec(sourceBinding, sinkBinding, relMapping, rel.getDirection(), relVar, attrEquals, hopLower, hopUpper, pathVariable));
         }
 
         // Apply WHERE to populate identity / shard filters on node contexts.
@@ -254,7 +298,9 @@ public final class CypherPlanner {
             HopSpec h = allHops.get(i);
             NodeBinding newSource = buildNodeBinding(nodeContexts.get(h.getSource().getVariable()));
             NodeBinding newSink = buildNodeBinding(nodeContexts.get(h.getSink().getVariable()));
-            allHops.set(i, new HopSpec(newSource, newSink, h.getRel(), h.getPatternDirection(), h.getRelVariable().orElse(null), h.getAttributeEquals()));
+            allHops.set(i, new HopSpec(newSource, newSink, h.getRel(), h.getPatternDirection(), h.getRelVariable().orElse(null), h.getAttributeEquals(),
+                            h.getLower().isPresent() ? h.getLower().getAsInt() : null, h.getUpper().isPresent() ? h.getUpper().getAsInt() : null,
+                            h.getPathVariable().orElse(null)));
         }
     }
 
@@ -402,10 +448,16 @@ public final class CypherPlanner {
         for (int i = 0; i < hops.size(); i++) {
             HopSpec h = hops.get(i);
             if (h.getRelVariable().filter(relVar::equals).isPresent()) {
+                if (h.isVariableLength()) {
+                    throw new CypherUnsupportedException("WHERE: property filters on a variable-length relationship variable ('" + relVar
+                                    + "') are not supported in M3; the variable binds a list of relationships, not a single edge");
+                }
                 // HopSpec is immutable — rebuild it with the new attribute filter.
                 Map<String,String> newAttrs = new LinkedHashMap<>(h.getAttributeEquals());
                 newAttrs.put(prop, value);
-                hops.set(i, new HopSpec(h.getSource(), h.getSink(), h.getRel(), h.getPatternDirection(), h.getRelVariable().orElse(null), newAttrs));
+                hops.set(i, new HopSpec(h.getSource(), h.getSink(), h.getRel(), h.getPatternDirection(), h.getRelVariable().orElse(null), newAttrs,
+                                h.getLower().isPresent() ? h.getLower().getAsInt() : null, h.getUpper().isPresent() ? h.getUpper().getAsInt() : null,
+                                h.getPathVariable().orElse(null)));
                 return;
             }
         }
@@ -477,47 +529,177 @@ public final class CypherPlanner {
         if (ret.getProjections().isEmpty()) {
             throw new CypherUnsupportedException("RETURN must list at least one projection");
         }
+        Set<String> pathVariables = collectPathVariables(hops);
         List<Projection> out = new ArrayList<>();
         Set<String> seenAlias = new LinkedHashSet<>();
         for (ProjectionItem item : ret.getProjections()) {
             Expression expr = item.getExpression();
-            if (!(expr instanceof PropertyExpression)) {
-                throw new CypherUnsupportedException("RETURN: only property projections (variable.property) are supported in M2");
+            String alias = item.getExposedName().orElseThrow(() -> new CypherUnsupportedException("RETURN: projection requires an alias (use AS)"));
+            if (!seenAlias.add(alias)) {
+                throw new CypherUnsupportedException("RETURN: duplicate projection alias '" + alias + "'");
             }
+            out.add(buildOneProjection(expr, alias, nodeContexts, relContexts, pathVariables));
+        }
+        return out;
+    }
+
+    private Projection buildOneProjection(Expression expr, String alias, Map<String,NodeContext> nodeContexts,
+                    Map<String,RelMapping> relContexts, Set<String> pathVariables) {
+        // RETURN <pathVar>  →  PATH_OBJECT
+        if (expr instanceof VariableExpression) {
+            String var = ((VariableExpression) expr).getName();
+            if (pathVariables.contains(var)) {
+                return Projection.pathObject(alias, var);
+            }
+            throw new CypherUnsupportedException("RETURN: bare variable '" + var
+                            + "' is only supported when it names a path (MATCH p = ...); for property projections use 'variable.property'");
+        }
+        // RETURN aggregating-call  →  AGGREGATE
+        if (expr instanceof FunctionCallExpression) {
+            FunctionCallExpression fn = (FunctionCallExpression) expr;
+            if (!fn.isAggregate()) {
+                throw new CypherUnsupportedException("RETURN: function '" + fn.getName() + "' is not a recognized aggregating function in M3");
+            }
+            return Projection.aggregate(alias, buildAggregateSpec(fn, nodeContexts));
+        }
+        // RETURN variable.property  →  NODE_PROPERTY / NODE_SHARD_PROPERTY / REL_PROPERTY
+        if (expr instanceof PropertyExpression) {
             PropertyExpression pe = (PropertyExpression) expr;
             if (pe.getPropertyPath().size() != 1) {
-                throw new CypherUnsupportedException("RETURN: nested property paths are not supported in M2");
+                throw new CypherUnsupportedException("RETURN: nested property paths are not supported in M3");
             }
             if (!(pe.getTarget() instanceof VariableExpression)) {
                 throw new CypherUnsupportedException("RETURN: property access must be on a bound variable directly");
             }
             String var = ((VariableExpression) pe.getTarget()).getName();
             String prop = pe.getPropertyPath().get(0);
-            String alias = item.getExposedName().orElseThrow(() -> new CypherUnsupportedException("RETURN: projection requires an alias (use AS)"));
-            if (!seenAlias.add(alias)) {
-                throw new CypherUnsupportedException("RETURN: duplicate projection alias '" + alias + "'");
-            }
+            return resolveValueProjection(alias, var, prop, nodeContexts, relContexts);
+        }
+        throw new CypherUnsupportedException(
+                        "RETURN: only property projections (variable.property), aggregating functions, and path variables are supported in M3");
+    }
 
-            Projection.Kind kind;
-            if (nodeContexts.containsKey(var)) {
-                NodeMapping mapping = nodeContexts.get(var).mapping;
-                kind = mapping.isIdentityProperty(prop) ? Projection.Kind.NODE_PROPERTY : Projection.Kind.NODE_SHARD_PROPERTY;
-                if (kind == Projection.Kind.NODE_SHARD_PROPERTY && !mapping.getProperties().containsKey(prop)) {
-                    throw new CypherUnsupportedException("RETURN: property '" + prop + "' is not defined in the schema for label '"
-                                    + mapping.getLabel() + "'");
-                }
-            } else if (relContexts.containsKey(var)) {
-                RelMapping relMapping = relContexts.get(var);
-                if (!relMapping.resolveAttributeSlot(prop).isPresent()) {
-                    throw new CypherUnsupportedException("RETURN: relationship property '" + prop + "' is not mapped to an edge attribute slot");
-                }
-                kind = Projection.Kind.REL_PROPERTY;
-            } else {
-                throw new CypherUnsupportedException("RETURN: variable '" + var + "' is not bound by any MATCH pattern");
+    private AggregateSpec buildAggregateSpec(FunctionCallExpression fn, Map<String,NodeContext> nodeContexts) {
+        AggregateSpec.Func func = parseAggregateFunc(fn.getName());
+        boolean distinct = fn.isDistinct();
+        if (func == AggregateSpec.Func.COUNT_STAR || (fn.isWildcard() && "COUNT".equalsIgnoreCase(fn.getName()))) {
+            if (!fn.isWildcard() && func != AggregateSpec.Func.COUNT_STAR) {
+                // shouldn't happen — parseAggregateFunc only returns COUNT_STAR for wildcard input
             }
-            out.add(new Projection(alias, var, prop, kind));
+            if (distinct) {
+                throw new CypherUnsupportedException("RETURN: COUNT(DISTINCT *) is not allowed");
+            }
+            return new AggregateSpec(AggregateSpec.Func.COUNT_STAR, null, null, false);
+        }
+        if (fn.getArguments().size() != 1) {
+            throw new CypherUnsupportedException("RETURN: " + fn.getName() + " requires exactly one argument");
+        }
+        Expression arg = fn.getArguments().get(0);
+        String var;
+        String prop;
+        if (arg instanceof VariableExpression) {
+            // Bare variable: equivalent to "var.<identity-property>" for a node binding.
+            var = ((VariableExpression) arg).getName();
+            if (!nodeContexts.containsKey(var)) {
+                throw new CypherUnsupportedException("RETURN: " + fn.getName() + " argument must reference a node variable in M3 (got '" + var + "')");
+            }
+            prop = nodeContexts.get(var).mapping.getIdentityProperty();
+        } else if (arg instanceof PropertyExpression) {
+            PropertyExpression pe = (PropertyExpression) arg;
+            if (pe.getPropertyPath().size() != 1 || !(pe.getTarget() instanceof VariableExpression)) {
+                throw new CypherUnsupportedException("RETURN: " + fn.getName() + " argument must be a single-level property access on a bound variable");
+            }
+            var = ((VariableExpression) pe.getTarget()).getName();
+            prop = pe.getPropertyPath().get(0);
+            if (!nodeContexts.containsKey(var)) {
+                throw new CypherUnsupportedException(
+                                "RETURN: " + fn.getName() + " argument must reference a node variable in M3 (got '" + var + "')");
+            }
+            NodeMapping mapping = nodeContexts.get(var).mapping;
+            if (!mapping.isIdentityProperty(prop) && !mapping.getProperties().containsKey(prop)) {
+                throw new CypherUnsupportedException("RETURN: " + fn.getName() + " argument property '" + prop
+                                + "' is not defined in the schema for label '" + mapping.getLabel() + "'");
+            }
+        } else {
+            throw new CypherUnsupportedException(
+                            "RETURN: " + fn.getName() + " argument must be a bound variable or 'variable.property' reference in M3");
+        }
+        return new AggregateSpec(func, var, prop, distinct);
+    }
+
+    private static AggregateSpec.Func parseAggregateFunc(String name) {
+        String upper = name.toUpperCase();
+        switch (upper) {
+            case "COUNT":
+                return AggregateSpec.Func.COUNT;
+            case "SUM":
+                return AggregateSpec.Func.SUM;
+            case "AVG":
+                return AggregateSpec.Func.AVG;
+            case "MIN":
+                return AggregateSpec.Func.MIN;
+            case "MAX":
+                return AggregateSpec.Func.MAX;
+            default:
+                throw new CypherUnsupportedException("RETURN: aggregating function '" + name + "' is not supported in M3");
+        }
+    }
+
+    private Projection resolveValueProjection(String alias, String var, String prop, Map<String,NodeContext> nodeContexts,
+                    Map<String,RelMapping> relContexts) {
+        Projection.Kind kind;
+        if (nodeContexts.containsKey(var)) {
+            NodeMapping mapping = nodeContexts.get(var).mapping;
+            kind = mapping.isIdentityProperty(prop) ? Projection.Kind.NODE_PROPERTY : Projection.Kind.NODE_SHARD_PROPERTY;
+            if (kind == Projection.Kind.NODE_SHARD_PROPERTY && !mapping.getProperties().containsKey(prop)) {
+                throw new CypherUnsupportedException("RETURN: property '" + prop + "' is not defined in the schema for label '"
+                                + mapping.getLabel() + "'");
+            }
+        } else if (relContexts.containsKey(var)) {
+            RelMapping relMapping = relContexts.get(var);
+            if (!relMapping.resolveAttributeSlot(prop).isPresent()) {
+                throw new CypherUnsupportedException("RETURN: relationship property '" + prop + "' is not mapped to an edge attribute slot");
+            }
+            kind = Projection.Kind.REL_PROPERTY;
+        } else {
+            throw new CypherUnsupportedException("RETURN: variable '" + var + "' is not bound by any MATCH pattern");
+        }
+        return new Projection(alias, var, prop, kind);
+    }
+
+    private static Set<String> collectPathVariables(List<HopSpec> hops) {
+        Set<String> out = new LinkedHashSet<>();
+        for (HopSpec h : hops) {
+            h.getPathVariable().ifPresent(out::add);
         }
         return out;
+    }
+
+    /**
+     * Builds the {@link GroupingSpec} when the projection list mixes aggregating
+     * and non-aggregating columns; the non-aggregating columns form the implicit
+     * GROUP BY key. Returns {@code null} when there are no aggregates.
+     */
+    private GroupingSpec buildGroupingSpec(List<Projection> projections) {
+        List<Projection> aggregates = new ArrayList<>();
+        List<Projection> groupKeys = new ArrayList<>();
+        for (Projection p : projections) {
+            if (p.getKind() == Projection.Kind.AGGREGATE) {
+                aggregates.add(p);
+            } else if (p.getKind() == Projection.Kind.PATH_OBJECT) {
+                // A path object can't be a GROUP BY key in M3 — fail clearly if mixed with aggregates.
+                if (!aggregates.isEmpty()) {
+                    throw new CypherUnsupportedException("RETURN: cannot mix path object '" + p.getAlias() + "' with aggregating projections");
+                }
+                groupKeys.add(p);
+            } else {
+                groupKeys.add(p);
+            }
+        }
+        if (aggregates.isEmpty()) {
+            return null;
+        }
+        return new GroupingSpec(groupKeys, aggregates);
     }
 
     /**

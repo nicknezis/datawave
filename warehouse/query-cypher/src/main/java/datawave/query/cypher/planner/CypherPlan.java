@@ -24,9 +24,17 @@ public final class CypherPlan {
     private final boolean distinct;
     private final List<SortSpec> orderBy;
     private final long schemaVersion;
+    private final GroupingSpec groupingSpec;
 
+    /** M2 constructor — no aggregation. */
     public CypherPlan(List<HopSpec> hops, List<Projection> projections, Long limit, Long skip,
                     boolean distinct, List<SortSpec> orderBy, long schemaVersion) {
+        this(hops, projections, limit, skip, distinct, orderBy, schemaVersion, null);
+    }
+
+    /** M3 constructor — optional {@link GroupingSpec} for aggregating RETURN. */
+    public CypherPlan(List<HopSpec> hops, List<Projection> projections, Long limit, Long skip,
+                    boolean distinct, List<SortSpec> orderBy, long schemaVersion, GroupingSpec groupingSpec) {
         if (Objects.requireNonNull(hops, "hops").isEmpty()) {
             throw new IllegalArgumentException("plan must have at least one hop");
         }
@@ -37,6 +45,7 @@ public final class CypherPlan {
         this.distinct = distinct;
         this.orderBy = Collections.unmodifiableList(new ArrayList<>(orderBy));
         this.schemaVersion = schemaVersion;
+        this.groupingSpec = groupingSpec;
     }
 
     /** All hops in traversal order (hop 0 is executed first). */
@@ -83,5 +92,9 @@ public final class CypherPlan {
 
     public long getSchemaVersion() {
         return schemaVersion;
+    }
+
+    public Optional<GroupingSpec> getGroupingSpec() {
+        return Optional.ofNullable(groupingSpec);
     }
 }

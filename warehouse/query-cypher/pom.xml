@@ -15,7 +15,14 @@
         M1: graph-schema mapping, single-hop logical planner, JEXL hop
         translator that builds Accumulo ranges directly, and a
         CypherQueryLogic that runs single-hop MATCH/WHERE/RETURN end-to-end
-        against the edge table.
+        against the edge table. M2: fixed-length multi-hop, WITH, ORDER BY,
+        SKIP, DISTINCT, and non-identity node properties via the
+        ShardEnrichmentService interface. M3: bounded variable-length
+        patterns [*lo..hi] via client-orchestrated BFS, streaming
+        aggregation (COUNT / COUNT(*) / COUNT(DISTINCT) / SUM / AVG /
+        MIN / MAX), and path binding in RETURN (MATCH p = ... RETURN p)
+        materialised as a typed CypherValue.PathValue.  Composite-row
+        visibilities are composed across hops via MarkingFunctions.
     </description>
     <properties>
         <version.antlr4>4.13.1</version.antlr4>

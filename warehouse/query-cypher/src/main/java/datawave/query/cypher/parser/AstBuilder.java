@@ -354,11 +354,12 @@ final class AstBuilder extends CypherBaseVisitor<Object> {
     private Expression buildFunction(CypherParser.FunctionInvocationContext ctx) {
         String name = ctx.symbolicName().getText();
         boolean distinct = ctx.DISTINCT() != null;
+        boolean wildcard = ctx.STAR() != null;
         List<Expression> args = new ArrayList<>();
         for (CypherParser.ExpressionContext e : ctx.expression()) {
             args.add(buildExpression(e));
         }
-        return new FunctionCallExpression(loc(ctx.start), name, distinct, args);
+        return new FunctionCallExpression(loc(ctx.start), name, distinct, wildcard, args);
     }
 
     private Expression buildParameter(CypherParser.ParameterContext ctx) {
