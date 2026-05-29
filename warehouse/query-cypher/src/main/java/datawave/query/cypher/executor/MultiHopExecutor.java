@@ -300,9 +300,15 @@ public final class MultiHopExecutor {
                 return true;
             }
             if (p.getKind() == Projection.Kind.AGGREGATE && p.getAggregateSpec().isPresent()) {
-                // Aggregating over a shard property also requires enrichment.
-                // Identity arguments are stored under the bare variable key already.
-                p.getAggregateSpec().get().getArgumentProperty().ifPresent(prop -> {});
+                // Aggregates whose argument references a non-identity node property
+                // ("var.prop") must run after enrichment so the value exists on the
+                // tuple. We can't tell here whether the prop is the identity without
+                // the schema, so we conservatively trigger enrichment whenever an
+                // aggregate has a property argument; enrich() will request the prop
+                // and the enrichment service no-ops for already-bound values.
+                if (p.getAggregateSpec().get().getArgumentProperty().isPresent()) {
+                    return true;
+                }
             }
         }
         for (HopSpec hop : plan.getHops()) {
@@ -502,11 +508,17 @@ public final class MultiHopExecutor {
         return out;
     }
 
+    /**
+     * ASCII unit-separator between concatenated projected values in the DISTINCT key. Using a control character that cannot appear inside identifier/property
+     * values prevents false-positive collisions like {@code ["ab","c"]} colliding with {@code ["a","bc"]}.
+     */
+    private static final char DISTINCT_KEY_SEP = '';
+
     private String projectedKey(PathTuple t, List<Projection> projections) {
         StringBuilder sb = new StringBuilder();
         for (Projection p : projections) {
             if (sb.length() > 0) {
-                sb.append('');
+                sb.append(DISTINCT_KEY_SEP);
             }
             String v = resolveProjectedValue(t, p);
             if (v != null) {
@@ -526,12 +538,31 @@ public final class MultiHopExecutor {
             case AGGREGATE:
                 return t.get(Projection.AGGREGATE_TUPLE_KEY_PREFIX + p.getAlias());
             case PATH_OBJECT:
-                // Paths aren't meaningfully comparable as strings for DISTINCT/ORDER BY;
-                // a stable but opaque key keeps the algorithms happy without false dedup.
-                return "path:" + p.getVariable() + "@" + System.identityHashCode(t.getPath(p.getVariable()));
+                return canonicalPathKey(t.getPath(p.getVariable()));
             default:
                 return null;
         }
+    }
+
+    /**
+     * Canonical, content-based key for a path's geometry. Two tuples that materialize the same node/edge sequence dedup to a single DISTINCT row and sort
+     * stably, independent of object identity.
+     */
+    static String canonicalPathKey(java.util.List<PathElement> elements) {
+        if (elements == null || elements.isEmpty()) {
+            return "path:";
+        }
+        StringBuilder sb = new StringBuilder("path:");
+        for (PathElement el : elements) {
+            if (el.getKind() == PathElement.Kind.NODE) {
+                PathElement.NodeElement n = (PathElement.NodeElement) el;
+                sb.append('N').append('').append(n.getIdentity()).append('');
+            } else {
+                PathElement.EdgeElement e = (PathElement.EdgeElement) el;
+                sb.append('E').append('').append(e.getType()).append('').append(e.getSourceIdentity()).append('').append(e.getSinkIdentity()).append('');
+            }
+        }
+        return sb.toString();
     }
 
     private void sort(List<PathTuple> tuples, List<SortSpec> orderBy, List<Projection> projections) {
@@ -588,7 +619,7 @@ public final class MultiHopExecutor {
             return t.get(p.getVariable());
         }
         if (p.getKind() == Projection.Kind.PATH_OBJECT) {
-            return "path:" + System.identityHashCode(t.getPath(p.getVariable()));
+            return canonicalPathKey(t.getPath(p.getVariable()));
         }
         return t.get(p.getVariable() + "." + p.getProperty());
     }

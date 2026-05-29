@@ -114,7 +114,12 @@ public class CypherQueryTransformer extends BaseQueryLogicTransformer<Entry<Key,
                 try {
                     return CypherValue.longValue(Long.parseLong(raw));
                 } catch (NumberFormatException e) {
-                    return CypherValue.longValue(0L);
+                    // Upstream produced a non-numeric value for a COUNT column — that
+                    // can only happen via aggregator/alias-key drift. Surface the raw
+                    // value to the caller (as a string) and log instead of silently
+                    // emitting zero, which would silently corrupt downstream totals.
+                    log.warn("COUNT projection '{}' received non-numeric value '{}'; emitting raw string to avoid silent zero", proj.getAlias(), raw);
+                    return CypherValue.string(raw);
                 }
             case SUM:
             case AVG:
