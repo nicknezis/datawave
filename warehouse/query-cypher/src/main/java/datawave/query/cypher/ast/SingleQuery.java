@@ -6,10 +6,8 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * A single reading query: a sequence of reading clauses (MATCH / WITH)
- * terminated by an optional RETURN. The RETURN is only optional when the
- * query is a UNION branch whose sibling supplies one; the semantic analyzer
- * enforces the "terminal branch must RETURN" rule.
+ * A single reading query: a sequence of reading clauses (MATCH / WITH) terminated by an optional RETURN. The RETURN is only optional when the query is a UNION
+ * branch whose sibling supplies one; the semantic analyzer enforces the "terminal branch must RETURN" rule.
  */
 public final class SingleQuery extends AstNode {
 

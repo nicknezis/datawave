@@ -6,9 +6,8 @@ import java.util.List;
 import datawave.query.cypher.ast.SourceLocation;
 
 /**
- * Thrown when a query parses cleanly but fails semantic analysis. As with the
- * syntax exception, carries every collected issue so callers see all of them
- * at once.
+ * Thrown when a query parses cleanly but fails semantic analysis. As with the syntax exception, carries every collected issue so callers see all of them at
+ * once.
  */
 public class SemanticException extends RuntimeException {
 

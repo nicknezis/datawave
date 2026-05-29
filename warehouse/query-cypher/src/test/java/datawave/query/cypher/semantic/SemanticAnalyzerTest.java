@@ -65,8 +65,7 @@ class SemanticAnalyzerTest {
 
     @Test
     void rejectsAggregateInWhere() {
-        assertThatExceptionOfType(SemanticException.class)
-                        .isThrownBy(() -> analyze("MATCH (a:Actor)-[:COSTAR_OF]-(b) WHERE count(b) > 10 RETURN a"));
+        assertThatExceptionOfType(SemanticException.class).isThrownBy(() -> analyze("MATCH (a:Actor)-[:COSTAR_OF]-(b) WHERE count(b) > 10 RETURN a"));
     }
 
     @Test
@@ -108,8 +107,7 @@ class SemanticAnalyzerTest {
 
     @Test
     void rejectsUnionAsOutOfScope() {
-        assertThatExceptionOfType(SemanticException.class)
-                        .isThrownBy(() -> analyze("MATCH (a:Actor) RETURN a.name UNION MATCH (b:Director) RETURN b.name"));
+        assertThatExceptionOfType(SemanticException.class).isThrownBy(() -> analyze("MATCH (a:Actor) RETURN a.name UNION MATCH (b:Director) RETURN b.name"));
     }
 
     @Test

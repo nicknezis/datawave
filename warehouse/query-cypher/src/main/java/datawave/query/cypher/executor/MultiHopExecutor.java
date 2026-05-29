@@ -37,28 +37,24 @@ import datawave.query.util.QueryScannerHelper;
 /**
  * Executes a multi-hop {@link CypherPlan} against the edge table.
  *
- * <p>M3 algorithm:
+ * <p>
+ * M3 algorithm:
  * <ol>
- *   <li>Hop 0: scan with the plan's literal identity filters (or, when hop 0
- *       is variable-length, delegate to {@link VariableLengthExpander} to
- *       drive the BFS from the literal frontier).</li>
- *   <li>Hop N (N &gt; 0): derive the frontier (unique source-node values
- *       from the previous hop's sinks), and either translate-and-scan once
- *       (fixed length) or delegate to {@link VariableLengthExpander} (when
- *       {@link HopSpec#isVariableLength()}).</li>
- *   <li>Post-process: optionally run shard enrichment, fold through
- *       {@link StreamingAggregator} if the plan carries a
- *       {@link GroupingSpec}, then apply DISTINCT, ORDER BY, SKIP
- *       (in that order). The caller applies LIMIT.</li>
+ * <li>Hop 0: scan with the plan's literal identity filters (or, when hop 0 is variable-length, delegate to {@link VariableLengthExpander} to drive the BFS from
+ * the literal frontier).</li>
+ * <li>Hop N (N &gt; 0): derive the frontier (unique source-node values from the previous hop's sinks), and either translate-and-scan once (fixed length) or
+ * delegate to {@link VariableLengthExpander} (when {@link HopSpec#isVariableLength()}).</li>
+ * <li>Post-process: optionally run shard enrichment, fold through {@link StreamingAggregator} if the plan carries a {@link GroupingSpec}, then apply DISTINCT,
+ * ORDER BY, SKIP (in that order). The caller applies LIMIT.</li>
  * </ol>
  *
- * <p>Every contributing edge cell's {@link org.apache.accumulo.core.security.ColumnVisibility}
- * is carried on the {@link PathTuple} so the transformer can compose composite
- * visibilities via {@link datawave.marking.MarkingFunctions#combine}.
+ * <p>
+ * Every contributing edge cell's {@link org.apache.accumulo.core.security.ColumnVisibility} is carried on the {@link PathTuple} so the transformer can compose
+ * composite visibilities via {@link datawave.marking.MarkingFunctions#combine}.
  *
- * <p>Executor remains one-shot in M3 — checkpointing across BFS boundaries is
- * deferred. The moment this becomes streaming, the BFS frontier + per-path
- * edge-trail history must be added to a serialisable checkpoint state.
+ * <p>
+ * Executor remains one-shot in M3 — checkpointing across BFS boundaries is deferred. The moment this becomes streaming, the BFS frontier + per-path edge-trail
+ * history must be added to a serialisable checkpoint state.
  */
 public final class MultiHopExecutor {
 
@@ -75,13 +71,13 @@ public final class MultiHopExecutor {
     private final ShardEnrichmentService enrichmentService;
     private final ExecutorLimits limits;
 
-    public MultiHopExecutor(AccumuloClient client, Set<Authorizations> auths, String tableName, int queryThreads, Query query,
-                    HopTranslator hopTranslator, ShardEnrichmentService enrichmentService) {
+    public MultiHopExecutor(AccumuloClient client, Set<Authorizations> auths, String tableName, int queryThreads, Query query, HopTranslator hopTranslator,
+                    ShardEnrichmentService enrichmentService) {
         this(client, auths, tableName, queryThreads, query, hopTranslator, enrichmentService, ExecutorLimits.DEFAULTS);
     }
 
-    public MultiHopExecutor(AccumuloClient client, Set<Authorizations> auths, String tableName, int queryThreads, Query query,
-                    HopTranslator hopTranslator, ShardEnrichmentService enrichmentService, ExecutorLimits limits) {
+    public MultiHopExecutor(AccumuloClient client, Set<Authorizations> auths, String tableName, int queryThreads, Query query, HopTranslator hopTranslator,
+                    ShardEnrichmentService enrichmentService, ExecutorLimits limits) {
         this.client = client;
         this.auths = auths;
         this.tableName = tableName;
@@ -93,15 +89,13 @@ public final class MultiHopExecutor {
     }
 
     /**
-     * Executes all hops and returns the fully post-processed result list
-     * (aggregation + DISTINCT + ORDER BY + SKIP applied; LIMIT is applied by
-     * the caller).
+     * Executes all hops and returns the fully post-processed result list (aggregation + DISTINCT + ORDER BY + SKIP applied; LIMIT is applied by the caller).
      *
-     * @param plan the logical plan
-     * @param initialTranslations the pre-built {@link HopTranslation} for the
-     *        first hop when it is fixed-length; may be {@code null} or empty
-     *        when hop 0 is variable-length (translations are built per BFS
-     *        step from the literal frontier instead)
+     * @param plan
+     *            the logical plan
+     * @param initialTranslations
+     *            the pre-built {@link HopTranslation} for the first hop when it is fixed-length; may be {@code null} or empty when hop 0 is variable-length
+     *            (translations are built per BFS step from the literal frontier instead)
      */
     public List<PathTuple> execute(CypherPlan plan, List<HopTranslation> initialTranslations) throws Exception {
         List<HopSpec> hops = plan.getHops();
@@ -198,8 +192,8 @@ public final class MultiHopExecutor {
             junctionVar = hopSinkVar;
             junctionIsHopSource = false;
         } else {
-            throw new CypherUnsupportedException("hop " + hopIndex + " shares no variable with the prior results; "
-                            + "disconnected patterns are not supported");
+            throw new CypherUnsupportedException(
+                            "hop " + hopIndex + " shares no variable with the prior results; " + "disconnected patterns are not supported");
         }
 
         if (hop.isVariableLength()) {
@@ -245,9 +239,8 @@ public final class MultiHopExecutor {
     }
 
     /**
-     * For a fixed-length hop bound to a path variable, append the source-node
-     * (when this is the first appearance of the path), the edge, and the
-     * sink-node to the path geometry.
+     * For a fixed-length hop bound to a path variable, append the source-node (when this is the first appearance of the path), the edge, and the sink-node to
+     * the path geometry.
      */
     private PathTuple decoratePathForFixedHop(HopSpec hop, HopTranslation translation, PathTuple tuple) {
         return decoratePathForFixedHop(hop, translation, tuple, tuple);
@@ -326,8 +319,8 @@ public final class MultiHopExecutor {
         BatchScanner scanner = QueryScannerHelper.createBatchScanner(client, tableName, auths, queryThreads, query);
         scanner.setRanges(translation.getRanges());
 
-        IteratorSetting filter = new IteratorSetting(FILTER_PRIORITY,
-                        EdgeFilterIterator.class.getSimpleName() + "_" + FILTER_PRIORITY, EdgeFilterIterator.class);
+        IteratorSetting filter = new IteratorSetting(FILTER_PRIORITY, EdgeFilterIterator.class.getSimpleName() + "_" + FILTER_PRIORITY,
+                        EdgeFilterIterator.class);
         filter.addOption(EdgeFilterIterator.JEXL_OPTION, translation.getFilterJexl());
         filter.addOption(EdgeFilterIterator.PROTOBUF_OPTION, "TRUE");
         filter.addOption(EdgeFilterIterator.INCLUDE_STATS_OPTION, "FALSE");
@@ -478,7 +471,8 @@ public final class MultiHopExecutor {
             }
             if (p.getKind() == Projection.Kind.AGGREGATE && p.getAggregateSpec().isPresent()) {
                 p.getAggregateSpec().get().getArgumentVariable().ifPresent(v -> {
-                    p.getAggregateSpec().get().getArgumentProperty().ifPresent(prop -> nodePropsNeeded.computeIfAbsent(v, k -> new LinkedHashSet<>()).add(prop));
+                    p.getAggregateSpec().get().getArgumentProperty()
+                                    .ifPresent(prop -> nodePropsNeeded.computeIfAbsent(v, k -> new LinkedHashSet<>()).add(prop));
                 });
             }
         }

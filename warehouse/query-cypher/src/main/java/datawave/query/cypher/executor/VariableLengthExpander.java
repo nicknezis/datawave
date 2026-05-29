@@ -16,28 +16,24 @@ import datawave.query.cypher.planner.CypherUnsupportedException;
 import datawave.query.cypher.planner.HopSpec;
 
 /**
- * Client-orchestrated breadth-first expansion of a single
- * {@link HopSpec#isVariableLength() variable-length} hop.
+ * Client-orchestrated breadth-first expansion of a single {@link HopSpec#isVariableLength() variable-length} hop.
  *
- * <p>Each BFS step does one edge scan against the previous step's sink
- * frontier, joins via the junction variable, and emits a tuple for every
- * path. A per-path edge-fingerprint set enforces
- * Cypher's relationship-isomorphism (no repeated relationship along a single
- * path within the same variable-length segment).
+ * <p>
+ * Each BFS step does one edge scan against the previous step's sink frontier, joins via the junction variable, and emits a tuple for every path. A per-path
+ * edge-fingerprint set enforces Cypher's relationship-isomorphism (no repeated relationship along a single path within the same variable-length segment).
  *
- * <p>Termination:
+ * <p>
+ * Termination:
  * <ul>
- *   <li>Runs {@code step ∈ [1, upper]} where {@code upper} is
- *       {@link HopSpec#getUpper()}; the planner caps {@code upper} at
- *       configured {@code maxVariableLengthUpper}.</li>
- *   <li>Stops early when the frontier collapses to empty.</li>
- *   <li>Per-step frontier size is bounded by {@code maxFrontierSize}; per-path
- *       edge history is bounded by {@code maxPathEdgeHistory}. Exceeding
- *       either throws {@link CypherUnsupportedException}.</li>
+ * <li>Runs {@code step ∈ [1, upper]} where {@code upper} is {@link HopSpec#getUpper()}; the planner caps {@code upper} at configured
+ * {@code maxVariableLengthUpper}.</li>
+ * <li>Stops early when the frontier collapses to empty.</li>
+ * <li>Per-step frontier size is bounded by {@code maxFrontierSize}; per-path edge history is bounded by {@code maxPathEdgeHistory}. Exceeding either throws
+ * {@link CypherUnsupportedException}.</li>
  * </ul>
  *
- * <p>Results from every step in {@code [lower, upper]} are accumulated and
- * returned together.
+ * <p>
+ * Results from every step in {@code [lower, upper]} are accumulated and returned together.
  */
 final class VariableLengthExpander {
 
@@ -58,8 +54,7 @@ final class VariableLengthExpander {
         PathTuple build(HopSpec hop, HopTranslation translation, EdgeRow row);
 
         /**
-         * Stable 64-bit fingerprint of the edge identity; used by the trail-history
-         * dedup. Two physical rows for the same logical edge (forward + reverse for
+         * Stable 64-bit fingerprint of the edge identity; used by the trail-history dedup. Two physical rows for the same logical edge (forward + reverse for
          * an undirected relationship) must hash to the same value.
          */
         long edgeFingerprint(HopSpec hop, EdgeRow row);
@@ -75,18 +70,16 @@ final class VariableLengthExpander {
     /**
      * Expands {@code [lower, upper]} steps starting from {@code incoming}.
      *
-     * @param hop         the variable-length hop spec; must satisfy
-     *                    {@link HopSpec#isVariableLength()}
-     * @param incoming    tuples flowing into this hop (driven by prior hops or
-     *                    by the initial scan when this is hop 0)
-     * @param junctionVar the variable in {@code incoming} that joins to the
-     *                    source side of this hop (typically {@code hop.source.variable}
-     *                    for sequential expansions, or {@code hop.sink.variable}
-     *                    when the prior hop ended at this hop's sink)
-     * @param junctionIsHopSource true if {@code junctionVar} corresponds to
-     *                    the hop's source endpoint, false if it corresponds to
-     *                    the sink (which triggers the undirected sink-frontier
-     *                    translation path)
+     * @param hop
+     *            the variable-length hop spec; must satisfy {@link HopSpec#isVariableLength()}
+     * @param incoming
+     *            tuples flowing into this hop (driven by prior hops or by the initial scan when this is hop 0)
+     * @param junctionVar
+     *            the variable in {@code incoming} that joins to the source side of this hop (typically {@code hop.source.variable} for sequential expansions,
+     *            or {@code hop.sink.variable} when the prior hop ended at this hop's sink)
+     * @param junctionIsHopSource
+     *            true if {@code junctionVar} corresponds to the hop's source endpoint, false if it corresponds to the sink (which triggers the undirected
+     *            sink-frontier translation path)
      */
     List<PathTuple> expand(HopSpec hop, List<PathTuple> incoming, String junctionVar, boolean junctionIsHopSource) throws Exception {
         if (!hop.isVariableLength()) {
@@ -95,8 +88,7 @@ final class VariableLengthExpander {
         int lower = hop.getLower().getAsInt();
         int upper = hop.getUpper().getAsInt();
         if (upper > limits.getMaxVariableLengthUpper()) {
-            throw new CypherUnsupportedException("variable-length upper bound " + upper + " exceeds executor cap "
-                            + limits.getMaxVariableLengthUpper());
+            throw new CypherUnsupportedException("variable-length upper bound " + upper + " exceeds executor cap " + limits.getMaxVariableLengthUpper());
         }
         String pathVar = hop.getPathVariable().orElse(null);
         String sourceVarName = junctionIsHopSource ? hop.getSource().getVariable() : hop.getSink().getVariable();
@@ -114,8 +106,8 @@ final class VariableLengthExpander {
                 break;
             }
             if (frontier.size() > limits.getMaxFrontierSize()) {
-                throw new CypherUnsupportedException("BFS frontier of " + frontier.size() + " exceeds cap of " + limits.getMaxFrontierSize()
-                                + " at step " + step + " of variable-length expansion");
+                throw new CypherUnsupportedException("BFS frontier of " + frontier.size() + " exceeds cap of " + limits.getMaxFrontierSize() + " at step "
+                                + step + " of variable-length expansion");
             }
             HopTranslation translation = junctionIsHopSource ? translator.translate(hop, frontier) : translator.translateWithSinkFrontier(hop, frontier);
             List<EdgeRow> edgeRows = edgeScanner.scan(translation);

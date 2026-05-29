@@ -15,8 +15,8 @@ public final class WithClause extends ReadingClause {
     private final Expression where;
     private final boolean projectAll;
 
-    public WithClause(SourceLocation location, boolean distinct, boolean projectAll, List<ProjectionItem> projections, List<SortItem> orderBy,
-                    Expression skip, Expression limit, Expression where) {
+    public WithClause(SourceLocation location, boolean distinct, boolean projectAll, List<ProjectionItem> projections, List<SortItem> orderBy, Expression skip,
+                    Expression limit, Expression where) {
         super(location);
         this.distinct = distinct;
         this.projectAll = projectAll;

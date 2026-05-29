@@ -8,10 +8,8 @@ import java.util.Objects;
 import datawave.query.cypher.mapping.NodeMapping;
 
 /**
- * One node endpoint of a planned hop. Records the Cypher variable name, the
- * {@link NodeMapping schema mapping} resolved from its label, equality filters
- * on its identity property (used to build Accumulo scan ranges), and
- * equality filters on non-identity properties (applied post-enrichment by
+ * One node endpoint of a planned hop. Records the Cypher variable name, the {@link NodeMapping schema mapping} resolved from its label, equality filters on its
+ * identity property (used to build Accumulo scan ranges), and equality filters on non-identity properties (applied post-enrichment by
  * {@link datawave.query.cypher.executor.ShardEnrichmentService}).
  */
 public final class NodeBinding {
@@ -31,8 +29,8 @@ public final class NodeBinding {
         this.variable = Objects.requireNonNull(variable, "variable");
         this.mapping = Objects.requireNonNull(mapping, "mapping");
         this.identityEquals = Collections.unmodifiableMap(new LinkedHashMap<>(identityEquals));
-        this.shardPropertyFilters = Collections.unmodifiableMap(
-                        shardPropertyFilters == null ? new LinkedHashMap<>() : new LinkedHashMap<>(shardPropertyFilters));
+        this.shardPropertyFilters = Collections
+                        .unmodifiableMap(shardPropertyFilters == null ? new LinkedHashMap<>() : new LinkedHashMap<>(shardPropertyFilters));
     }
 
     public String getVariable() {
@@ -44,9 +42,8 @@ public final class NodeBinding {
     }
 
     /**
-     * Equality filters on the identity property: an empty map means
-     * "match any vertex of this label"; a single entry means
-     * "match a vertex whose identity equals this value".
+     * Equality filters on the identity property: an empty map means "match any vertex of this label"; a single entry means "match a vertex whose identity
+     * equals this value".
      */
     public Map<String,String> getIdentityEquals() {
         return identityEquals;
@@ -57,8 +54,7 @@ public final class NodeBinding {
     }
 
     /**
-     * Equality filters on non-identity node properties. Applied by the
-     * executor after shard enrichment; empty map means no additional filter.
+     * Equality filters on non-identity node properties. Applied by the executor after shard enrichment; empty map means no additional filter.
      */
     public Map<String,String> getShardPropertyFilters() {
         return shardPropertyFilters;

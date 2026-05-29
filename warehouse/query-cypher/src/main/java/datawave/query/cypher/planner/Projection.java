@@ -4,25 +4,18 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * One column in the RETURN clause, resolved to its bound variable, the
- * property name, and the exposed alias.
+ * One column in the RETURN clause, resolved to its bound variable, the property name, and the exposed alias.
  *
- * <p>{@link Kind} distinguishes how the value is sourced:
+ * <p>
+ * {@link Kind} distinguishes how the value is sourced:
  * <ul>
- *   <li>{@link Kind#NODE_PROPERTY} — the node identity property, read
- *       directly from the edge row SOURCE/SINK; no shard lookup needed.</li>
- *   <li>{@link Kind#NODE_SHARD_PROPERTY} — a non-identity node property
- *       that requires a shard-table lookup via ShardEnrichmentService.</li>
- *   <li>{@link Kind#REL_PROPERTY} — an edge attribute slot value, read
- *       from the edge column qualifier.</li>
- *   <li>{@link Kind#PATH_OBJECT} — the geometry bound to a Cypher path
- *       variable (e.g. {@code MATCH p = (a)-[*1..n]-(b) RETURN p}); the
- *       transformer materialises it as a {@link datawave.query.cypher.transformer.CypherValue.PathValue}.
- *       {@link #getProperty()} is {@code null} for this kind.</li>
- *   <li>{@link Kind#AGGREGATE} — an aggregating projection. The streaming
- *       aggregator stores the per-group result under
- *       {@code __agg__.<alias>} in the emitted {@link datawave.query.cypher.executor.PathTuple}.
- *       {@link #getAggregateSpec()} carries the function and argument.</li>
+ * <li>{@link Kind#NODE_PROPERTY} — the node identity property, read directly from the edge row SOURCE/SINK; no shard lookup needed.</li>
+ * <li>{@link Kind#NODE_SHARD_PROPERTY} — a non-identity node property that requires a shard-table lookup via ShardEnrichmentService.</li>
+ * <li>{@link Kind#REL_PROPERTY} — an edge attribute slot value, read from the edge column qualifier.</li>
+ * <li>{@link Kind#PATH_OBJECT} — the geometry bound to a Cypher path variable (e.g. {@code MATCH p = (a)-[*1..n]-(b) RETURN p}); the transformer materialises
+ * it as a {@link datawave.query.cypher.transformer.CypherValue.PathValue}. {@link #getProperty()} is {@code null} for this kind.</li>
+ * <li>{@link Kind#AGGREGATE} — an aggregating projection. The streaming aggregator stores the per-group result under {@code __agg__.<alias>} in the emitted
+ * {@link datawave.query.cypher.executor.PathTuple}. {@link #getAggregateSpec()} carries the function and argument.</li>
  * </ul>
  */
 public final class Projection {
@@ -75,10 +68,8 @@ public final class Projection {
     }
 
     /**
-     * Build a {@link Kind#AGGREGATE} projection driven by the supplied
-     * {@link AggregateSpec}. {@code variable}/{@code property} are derived
-     * from the spec's argument (or left null for COUNT_STAR) so the executor
-     * can find the per-row argument value without a separate lookup.
+     * Build a {@link Kind#AGGREGATE} projection driven by the supplied {@link AggregateSpec}. {@code variable}/{@code property} are derived from the spec's
+     * argument (or left null for COUNT_STAR) so the executor can find the per-row argument value without a separate lookup.
      */
     public static Projection aggregate(String alias, AggregateSpec spec) {
         Objects.requireNonNull(spec, "spec");
@@ -90,9 +81,8 @@ public final class Projection {
     }
 
     /**
-     * Variable name. {@code null} for {@link Kind#AGGREGATE} of {@code COUNT(*)};
-     * the variable bound by the path for {@link Kind#PATH_OBJECT}; otherwise
-     * the source variable for the property lookup.
+     * Variable name. {@code null} for {@link Kind#AGGREGATE} of {@code COUNT(*)}; the variable bound by the path for {@link Kind#PATH_OBJECT}; otherwise the
+     * source variable for the property lookup.
      */
     public String getVariable() {
         return variable;

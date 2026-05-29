@@ -22,13 +22,9 @@ public final class ProjectionItem extends AstNode {
     }
 
     /**
-     * The name under which this projection is exposed to downstream clauses.
-     * If an explicit {@code AS alias} was given, that is the name. Otherwise,
-     * simple references get an implicit name matching their source text —
-     * {@code x} for a variable, {@code x.prop} for a property access,
-     * {@code $p} for a parameter. Complex expressions (arithmetic, function
-     * calls, comparisons) have no implicit name and must be aliased with
-     * {@code AS} to be referenced downstream.
+     * The name under which this projection is exposed to downstream clauses. If an explicit {@code AS alias} was given, that is the name. Otherwise, simple
+     * references get an implicit name matching their source text — {@code x} for a variable, {@code x.prop} for a property access, {@code $p} for a parameter.
+     * Complex expressions (arithmetic, function calls, comparisons) have no implicit name and must be aliased with {@code AS} to be referenced downstream.
      */
     public Optional<String> getExposedName() {
         if (alias != null) {

@@ -41,23 +41,18 @@ import datawave.query.cypher.transformer.CypherRow;
 /**
  * Cypher query logic for M2: multi-hop MATCH, WITH, ORDER BY, SKIP, DISTINCT.
  *
- * <p>Lifecycle:
+ * <p>
+ * Lifecycle:
  * <ol>
- *   <li>{@link #initialize}: parses the Cypher text, runs the planner to
- *       produce a {@link CypherPlan}, pre-translates hop 0, and stores the
- *       plan and initial translation in the returned
- *       {@link CypherQueryConfiguration}; later hops are translated during
- *       frontier execution at runtime.</li>
- *   <li>{@link #setupQuery}: runs the full hop chain via
- *       {@link MultiHopExecutor} (in-memory join for multi-hop), applies
- *       DISTINCT / ORDER BY / SKIP post-processing, serialises the result
- *       list as synthetic {@code Entry<Key,Value>} entries, and wraps with
- *       LIMIT if requested.</li>
- *   <li>{@link #getTransformer}: returns a {@link CypherQueryTransformer}
- *       that projects RETURN columns from each {@link PathTuple}.</li>
+ * <li>{@link #initialize}: parses the Cypher text, runs the planner to produce a {@link CypherPlan}, pre-translates hop 0, and stores the plan and initial
+ * translation in the returned {@link CypherQueryConfiguration}; later hops are translated during frontier execution at runtime.</li>
+ * <li>{@link #setupQuery}: runs the full hop chain via {@link MultiHopExecutor} (in-memory join for multi-hop), applies DISTINCT / ORDER BY / SKIP
+ * post-processing, serialises the result list as synthetic {@code Entry<Key,Value>} entries, and wraps with LIMIT if requested.</li>
+ * <li>{@link #getTransformer}: returns a {@link CypherQueryTransformer} that projects RETURN columns from each {@link PathTuple}.</li>
  * </ol>
  *
- * <p>Production Spring wiring is deferred to M4.
+ * <p>
+ * Production Spring wiring is deferred to M4.
  */
 public class CypherQueryLogic extends BaseQueryLogic<Map.Entry<Key,Value>> {
 
@@ -156,8 +151,8 @@ public class CypherQueryLogic extends BaseQueryLogic<Map.Entry<Key,Value>> {
 
         ExecutorLimits limits = new ExecutorLimits(cfg.getMaxVariableLengthUpper(), cfg.getMaxFrontierSize(), cfg.getMaxAggregateGroups(),
                         cfg.getMaxPathEdgeHistory());
-        MultiHopExecutor executor = new MultiHopExecutor(client, auths, cfg.getTableName(), queryThreads, cfg.getQuery(),
-                        new HopTranslator(), enrichmentService, limits);
+        MultiHopExecutor executor = new MultiHopExecutor(client, auths, cfg.getTableName(), queryThreads, cfg.getQuery(), new HopTranslator(),
+                        enrichmentService, limits);
 
         List<PathTuple> results = executor.execute(plan, cfg.getHopTranslations());
         cfg.setResultTuples(results);
@@ -175,9 +170,8 @@ public class CypherQueryLogic extends BaseQueryLogic<Map.Entry<Key,Value>> {
     }
 
     /**
-     * Encodes each {@link PathTuple} as a synthetic {@code Entry<Key,Value>}
-     * where the row key is the tuple index and the value carries the
-     * serialized tuple bytes.
+     * Encodes each {@link PathTuple} as a synthetic {@code Entry<Key,Value>} where the row key is the tuple index and the value carries the serialized tuple
+     * bytes.
      */
     private List<Map.Entry<Key,Value>> buildSyntheticEntries(List<PathTuple> tuples) {
         List<Map.Entry<Key,Value>> out = new ArrayList<>(tuples.size());
@@ -224,10 +218,8 @@ public class CypherQueryLogic extends BaseQueryLogic<Map.Entry<Key,Value>> {
             HopSpec hop = plan.getHops().get(i);
             sb.append("  hop ").append(i).append(": ");
             if (hop.isVariableLength()) {
-                sb.append("VAR_LENGTH [").append(hop.getLower().getAsInt()).append("..").append(hop.getUpper().getAsInt())
-                                .append("] type=").append(hop.getRel().getCypherType())
-                                .append(" dir=").append(hop.getPatternDirection())
-                                .append(" (frontier-driven per step)");
+                sb.append("VAR_LENGTH [").append(hop.getLower().getAsInt()).append("..").append(hop.getUpper().getAsInt()).append("] type=")
+                                .append(hop.getRel().getCypherType()).append(" dir=").append(hop.getPatternDirection()).append(" (frontier-driven per step)");
                 hop.getPathVariable().ifPresent(pv -> sb.append(" path=").append(pv));
             } else if (i == 0) {
                 HopTranslation t = translator.translate(hop);
@@ -240,8 +232,7 @@ public class CypherQueryLogic extends BaseQueryLogic<Map.Entry<Key,Value>> {
             sb.append('\n');
         }
         plan.getGroupingSpec().ifPresent(g -> {
-            sb.append("  grouping: keys=").append(g.getGroupByKeys().size())
-                            .append(" aggregates=[");
+            sb.append("  grouping: keys=").append(g.getGroupByKeys().size()).append(" aggregates=[");
             for (int i = 0; i < g.getAggregates().size(); i++) {
                 if (i > 0) {
                     sb.append(", ");

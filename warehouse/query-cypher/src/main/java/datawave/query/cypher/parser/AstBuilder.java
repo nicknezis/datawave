@@ -35,9 +35,8 @@ import datawave.query.cypher.parser.antlr.CypherBaseVisitor;
 import datawave.query.cypher.parser.antlr.CypherParser;
 
 /**
- * Converts the ANTLR-generated parse tree into the typed AST defined under
- * {@link datawave.query.cypher.ast}. Keeps the parse tree isolated so the rest
- * of the planner never depends on ANTLR types.
+ * Converts the ANTLR-generated parse tree into the typed AST defined under {@link datawave.query.cypher.ast}. Keeps the parse tree isolated so the rest of the
+ * planner never depends on ANTLR types.
  */
 final class AstBuilder extends CypherBaseVisitor<Object> {
 

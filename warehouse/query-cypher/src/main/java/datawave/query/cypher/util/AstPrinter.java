@@ -27,14 +27,11 @@ import datawave.query.cypher.ast.VariableExpression;
 import datawave.query.cypher.ast.WithClause;
 
 /**
- * Indented textual dump of a parsed {@link CypherQuery}. Serves as M0's
- * implementation of the "getPlannedScript dumps parsed AST" milestone
- * deliverable: downstream planner stages will replace this with a physical
- * plan, but for M0 the AST dump is what callers get.
+ * Indented textual dump of a parsed {@link CypherQuery}. Serves as M0's implementation of the "getPlannedScript dumps parsed AST" milestone deliverable:
+ * downstream planner stages will replace this with a physical plan, but for M0 the AST dump is what callers get.
  *
- * The format is intended for humans and tests. It is not round-trippable
- * back into Cypher text — if that's ever needed, a separate serializer
- * should be added rather than overloading this printer.
+ * The format is intended for humans and tests. It is not round-trippable back into Cypher text — if that's ever needed, a separate serializer should be added
+ * rather than overloading this printer.
  */
 public final class AstPrinter {
 
@@ -187,8 +184,8 @@ public final class AstPrinter {
             sb.append(" types=").append(r.getTypes());
         }
         if (r.isVariableLength()) {
-            sb.append(" length=[").append(r.getLower().isPresent() ? r.getLower().getAsInt() : "")
-                            .append("..").append(r.getUpper().isPresent() ? r.getUpper().getAsInt() : "").append("]");
+            sb.append(" length=[").append(r.getLower().isPresent() ? r.getLower().getAsInt() : "").append("..")
+                            .append(r.getUpper().isPresent() ? r.getUpper().getAsInt() : "").append("]");
         }
         line(sb.toString());
         r.getProperties().ifPresent(this::printProperties);

@@ -21,23 +21,20 @@ import datawave.query.cypher.planner.Projection;
 /**
  * Streaming GROUP BY + aggregation over a stream of {@link PathTuple}s.
  *
- * <p>Group key = ordered tuple of resolved values for each non-aggregate
- * projection. One accumulator row per group; per-row argument values are
- * read from the PathTuple under {@code "variable.property"} (or directly
- * under the variable for identity projections).
+ * <p>
+ * Group key = ordered tuple of resolved values for each non-aggregate projection. One accumulator row per group; per-row argument values are read from the
+ * PathTuple under {@code "variable.property"} (or directly under the variable for identity projections).
  *
- * <p>Output tuples carry:
+ * <p>
+ * Output tuples carry:
  * <ul>
- *   <li>group-by column values under their natural variable keys (so
- *       {@code MultiHopExecutor.resolveProjectedValue} resolves them
- *       unchanged), and</li>
- *   <li>aggregate results under {@code "__agg__.<alias>"} keys so the
- *       transformer can read them while keeping the rest of the post-
- *       processing pipeline unaware of aggregation.</li>
+ * <li>group-by column values under their natural variable keys (so {@code MultiHopExecutor.resolveProjectedValue} resolves them unchanged), and</li>
+ * <li>aggregate results under {@code "__agg__.<alias>"} keys so the transformer can read them while keeping the rest of the post- processing pipeline unaware
+ * of aggregation.</li>
  * </ul>
  *
- * <p>Composing every contributing tuple's {@link PathTuple#getVisibilities()
- * visibilities} keeps the per-group composite-row marking honest.
+ * <p>
+ * Composing every contributing tuple's {@link PathTuple#getVisibilities() visibilities} keeps the per-group composite-row marking honest.
  */
 final class StreamingAggregator {
 

@@ -9,10 +9,8 @@ import datawave.query.cypher.semantic.SemanticAnalyzer;
 import datawave.query.cypher.util.AstPrinter;
 
 /**
- * M0 public facade: turns Cypher text into a validated AST and optionally
- * dumps it. Later milestones add logical planning, physical translation, and
- * the CypherQueryLogic wiring; those extensions will consume the AST +
- * binding table surfaced here without changing this entry point.
+ * M0 public facade: turns Cypher text into a validated AST and optionally dumps it. Later milestones add logical planning, physical translation, and the
+ * CypherQueryLogic wiring; those extensions will consume the AST + binding table surfaced here without changing this entry point.
  *
  * Thread-safe: holds no per-call state.
  */
@@ -28,9 +26,8 @@ public final class CypherFrontEnd {
     }
 
     /**
-     * Renders the M0 equivalent of {@code QueryPlanner#getPlannedScript}: a
-     * human-readable dump of the parsed AST. When the Cypher planner lands
-     * in M1+, this will grow into a real physical-plan rendering.
+     * Renders the M0 equivalent of {@code QueryPlanner#getPlannedScript}: a human-readable dump of the parsed AST. When the Cypher planner lands in M1+, this
+     * will grow into a real physical-plan rendering.
      */
     public String getPlannedScript(String text) {
         return AstPrinter.print(analyze(text).getAst());

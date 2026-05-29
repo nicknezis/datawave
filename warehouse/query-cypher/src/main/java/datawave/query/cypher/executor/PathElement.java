@@ -6,17 +6,14 @@ import java.util.Map;
 import java.util.Objects;
 
 /**
- * One vertex or edge along a bound path variable's geometry. Captured in
- * {@link PathTuple#getPath(String) PathTuple.getPath} as an alternating
- * {@code Node, Edge, Node, Edge, ..., Node} sequence so the transformer can
- * materialise {@code MATCH p = (a)-[*1..n]-(b) RETURN p} as a structured
+ * One vertex or edge along a bound path variable's geometry. Captured in {@link PathTuple#getPath(String) PathTuple.getPath} as an alternating
+ * {@code Node, Edge, Node, Edge, ..., Node} sequence so the transformer can materialise {@code MATCH p = (a)-[*1..n]-(b) RETURN p} as a structured
  * record-of-records on the wire.
  */
 public abstract class PathElement {
 
     public enum Kind {
-        NODE,
-        EDGE
+        NODE, EDGE
     }
 
     private final Kind kind;
@@ -40,8 +37,7 @@ public abstract class PathElement {
             super(Kind.NODE);
             this.variable = variable;
             this.identity = Objects.requireNonNull(identity, "identity");
-            this.properties = properties == null ? Collections.emptyMap()
-                            : Collections.unmodifiableMap(new LinkedHashMap<>(properties));
+            this.properties = properties == null ? Collections.emptyMap() : Collections.unmodifiableMap(new LinkedHashMap<>(properties));
         }
 
         /** May be {@code null} for anonymous junctions inside variable-length expansions. */
@@ -73,8 +69,7 @@ public abstract class PathElement {
             this.type = Objects.requireNonNull(type, "type");
             this.sourceIdentity = Objects.requireNonNull(sourceIdentity, "sourceIdentity");
             this.sinkIdentity = Objects.requireNonNull(sinkIdentity, "sinkIdentity");
-            this.attributes = attributes == null ? Collections.emptyMap()
-                            : Collections.unmodifiableMap(new LinkedHashMap<>(attributes));
+            this.attributes = attributes == null ? Collections.emptyMap() : Collections.unmodifiableMap(new LinkedHashMap<>(attributes));
         }
 
         /** May be {@code null} for anonymous relationships inside variable-length expansions. */

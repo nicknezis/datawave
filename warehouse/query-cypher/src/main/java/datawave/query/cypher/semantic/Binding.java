@@ -8,8 +8,7 @@ import java.util.Objects;
 import datawave.query.cypher.ast.SourceLocation;
 
 /**
- * A single variable binding in a {@link Scope}. Immutable; scopes create new
- * bindings rather than mutating existing ones.
+ * A single variable binding in a {@link Scope}. Immutable; scopes create new bindings rather than mutating existing ones.
  */
 public final class Binding {
 
@@ -38,12 +37,9 @@ public final class Binding {
     }
 
     /**
-     * For NODE bindings, the union of labels asserted for the variable
-     * across all pattern occurrences (matching Cypher's additional-label
-     * assertion semantics: each reuse of a node variable adds any newly
-     * declared labels to the set the variable must carry). For RELATIONSHIP
-     * bindings, the declared relationship types. Empty for PATH / VALUE
-     * bindings.
+     * For NODE bindings, the union of labels asserted for the variable across all pattern occurrences (matching Cypher's additional-label assertion semantics:
+     * each reuse of a node variable adds any newly declared labels to the set the variable must carry). For RELATIONSHIP bindings, the declared relationship
+     * types. Empty for PATH / VALUE bindings.
      */
     public List<String> getLabelsOrTypes() {
         return labelsOrTypes;

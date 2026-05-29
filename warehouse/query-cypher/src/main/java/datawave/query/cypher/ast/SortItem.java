@@ -3,8 +3,7 @@ package datawave.query.cypher.ast;
 public final class SortItem extends AstNode {
 
     public enum Direction {
-        ASC,
-        DESC
+        ASC, DESC
     }
 
     private final Expression expression;

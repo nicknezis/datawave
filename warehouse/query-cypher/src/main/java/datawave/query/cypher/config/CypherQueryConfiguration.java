@@ -10,16 +10,12 @@ import datawave.query.cypher.physical.HopTranslation;
 import datawave.query.cypher.planner.CypherPlan;
 
 /**
- * Carries the planned-and-translated artifacts for a Cypher query through
- * the {@code initialize()} → {@code setupQuery()} → {@code getTransformer()}
- * lifecycle.
+ * Carries the planned-and-translated artifacts for a Cypher query through the {@code initialize()} → {@code setupQuery()} → {@code getTransformer()} lifecycle.
  *
- * <p>The plan and hop translations are populated by
- * {@code CypherQueryLogic.initialize()} and consumed by both
- * {@code setupQuery()} (for ranges + filter JEXL) and the transformer (for
- * projection metadata). The result tuples are populated by
- * {@code setupQuery()} (after the full hop chain executes) and consumed by
- * the transformer.
+ * <p>
+ * The plan and hop translations are populated by {@code CypherQueryLogic.initialize()} and consumed by both {@code setupQuery()} (for ranges + filter JEXL) and
+ * the transformer (for projection metadata). The result tuples are populated by {@code setupQuery()} (after the full hop chain executes) and consumed by the
+ * transformer.
  */
 public class CypherQueryConfiguration extends GenericQueryConfiguration {
 
@@ -44,16 +40,14 @@ public class CypherQueryConfiguration extends GenericQueryConfiguration {
     private transient CypherPlan plan;
 
     /**
-     * One pre-built translation per hop (index 0 = first hop).
-     * Subsequent hops are re-translated at scan time with frontier values.
-     * Transient — derived from the plan.
+     * One pre-built translation per hop (index 0 = first hop). Subsequent hops are re-translated at scan time with frontier values. Transient — derived from
+     * the plan.
      */
     private transient List<HopTranslation> hopTranslations = Collections.emptyList();
 
     /**
-     * Fully post-processed result tuples (after multi-hop join, enrichment,
-     * DISTINCT, ORDER BY, SKIP). Populated by {@code setupQuery()} and
-     * consumed by the iterator + transformer. Transient.
+     * Fully post-processed result tuples (after multi-hop join, enrichment, DISTINCT, ORDER BY, SKIP). Populated by {@code setupQuery()} and consumed by the
+     * iterator + transformer. Transient.
      */
     private transient List<PathTuple> resultTuples = Collections.emptyList();
 

@@ -4,11 +4,9 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * Describes an aggregating projection: which function to apply, which bound
- * variable's property feeds the accumulator, and whether DISTINCT pre-dedup
- * applies. {@code COUNT(*)} uses {@link Func#COUNT_STAR} with empty variable
- * and property; every other function has a single argument expression that
- * must resolve to a {@code variable.property} reference.
+ * Describes an aggregating projection: which function to apply, which bound variable's property feeds the accumulator, and whether DISTINCT pre-dedup applies.
+ * {@code COUNT(*)} uses {@link Func#COUNT_STAR} with empty variable and property; every other function has a single argument expression that must resolve to a
+ * {@code variable.property} reference.
  */
 public final class AggregateSpec {
 
@@ -67,8 +65,7 @@ public final class AggregateSpec {
     }
 
     /**
-     * The key used in {@link datawave.query.cypher.executor.PathTuple} to read
-     * the per-row argument value during aggregation. {@code null} for
+     * The key used in {@link datawave.query.cypher.executor.PathTuple} to read the per-row argument value during aggregation. {@code null} for
      * {@link Func#COUNT_STAR}.
      */
     public String getArgumentTupleKey() {

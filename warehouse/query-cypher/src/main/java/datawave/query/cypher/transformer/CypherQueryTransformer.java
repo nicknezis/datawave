@@ -26,15 +26,13 @@ import datawave.query.cypher.planner.CypherPlan;
 import datawave.query.cypher.planner.Projection;
 
 /**
- * Projects RETURN columns from each synthetic {@code Entry<Key,Value>} that
- * encodes a {@link PathTuple} (produced by {@link datawave.query.cypher.executor.MultiHopExecutor}).
+ * Projects RETURN columns from each synthetic {@code Entry<Key,Value>} that encodes a {@link PathTuple} (produced by
+ * {@link datawave.query.cypher.executor.MultiHopExecutor}).
  *
- * <p>M3: column values are typed ({@link CypherValue}); path projections
- * materialise as nested {@link CypherValue.PathValue} records; aggregate
- * results read from the executor's {@code __agg__.<alias>} reserved keys and
- * adopt the right scalar type per function. Composite-row markings are the
- * AND of every contributing cell's {@link ColumnVisibility} via
- * {@link MarkingFunctions#combine}.
+ * <p>
+ * M3: column values are typed ({@link CypherValue}); path projections materialise as nested {@link CypherValue.PathValue} records; aggregate results read from
+ * the executor's {@code __agg__.<alias>} reserved keys and adopt the right scalar type per function. Composite-row markings are the AND of every contributing
+ * cell's {@link ColumnVisibility} via {@link MarkingFunctions#combine}.
  */
 public class CypherQueryTransformer extends BaseQueryLogicTransformer<Entry<Key,Value>,CypherRow> {
 

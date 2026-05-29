@@ -7,11 +7,9 @@ import java.util.Map;
 import java.util.Optional;
 
 /**
- * Ordered map of variable name → {@link Binding}. Scopes are chained by the
- * analyzer (MATCH adds to the current scope, WITH starts a fresh scope seeded
- * only with the projections). Variables may be reused across subsequent
- * MATCH clauses in the same scope only if their kind and declared labels
- * remain compatible; the analyzer enforces that.
+ * Ordered map of variable name → {@link Binding}. Scopes are chained by the analyzer (MATCH adds to the current scope, WITH starts a fresh scope seeded only
+ * with the projections). Variables may be reused across subsequent MATCH clauses in the same scope only if their kind and declared labels remain compatible;
+ * the analyzer enforces that.
  */
 public final class Scope {
 

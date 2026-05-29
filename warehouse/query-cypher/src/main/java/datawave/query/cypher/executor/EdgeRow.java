@@ -7,8 +7,7 @@ import org.apache.accumulo.core.data.Value;
 import org.apache.accumulo.core.security.ColumnVisibility;
 
 /**
- * One scanned edge cell, paired with its decoded {@link ColumnVisibility} so
- * downstream tuple construction can compose visibility without re-decoding.
+ * One scanned edge cell, paired with its decoded {@link ColumnVisibility} so downstream tuple construction can compose visibility without re-decoding.
  */
 public final class EdgeRow {
 

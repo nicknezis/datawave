@@ -19,32 +19,23 @@ import java.util.Set;
 import org.apache.accumulo.core.security.ColumnVisibility;
 
 /**
- * An immutable snapshot of all variable bindings for one result path through
- * the hop chain. Keys in {@link #asMap} are Cypher variable names (for node
- * variables) or {@code "varName.propertyName"} (for relationship attribute
- * values and post-enrichment node properties).
+ * An immutable snapshot of all variable bindings for one result path through the hop chain. Keys in {@link #asMap} are Cypher variable names (for node
+ * variables) or {@code "varName.propertyName"} (for relationship attribute values and post-enrichment node properties).
  *
- * <p>M3 extensions:
+ * <p>
+ * M3 extensions:
  * <ul>
- *   <li>{@link #getPath(String)} — ordered alternating list of
- *       {@link PathElement.NodeElement node} and
- *       {@link PathElement.EdgeElement edge} appearances bound to a Cypher
- *       path variable (one per path-bound MATCH).</li>
- *   <li>Per-path trail-history of edge fingerprints
- *       ({@link #containsEdgeId(String, long)} /
- *       {@link #recordEdgeId(String, long)}) to enforce relationship-isomorphism
- *       inside a variable-length expansion (no repeated edge along the same
- *       path within the same {@code [*lo..hi]} segment).</li>
- *   <li>{@link #getVisibilities()} — every contributing edge cell's
- *       {@link ColumnVisibility}, ANDed together by the transformer via
- *       {@link datawave.marking.MarkingFunctions#combine} so composite-row
- *       markings reflect the union of constraints.</li>
+ * <li>{@link #getPath(String)} — ordered alternating list of {@link PathElement.NodeElement node} and {@link PathElement.EdgeElement edge} appearances bound to
+ * a Cypher path variable (one per path-bound MATCH).</li>
+ * <li>Per-path trail-history of edge fingerprints ({@link #containsEdgeId(String, long)} / {@link #recordEdgeId(String, long)}) to enforce
+ * relationship-isomorphism inside a variable-length expansion (no repeated edge along the same path within the same {@code [*lo..hi]} segment).</li>
+ * <li>{@link #getVisibilities()} — every contributing edge cell's {@link ColumnVisibility}, ANDed together by the transformer via
+ * {@link datawave.marking.MarkingFunctions#combine} so composite-row markings reflect the union of constraints.</li>
  * </ul>
  *
- * <p>Serialization is versioned: v1 = M2 values-only format
- * ({@link #KV_SEP}/{@link #PAIR_SEP}-delimited); v2 = paths + edge-history +
- * visibilities. {@link #fromBytes} accepts both versions for forward compat;
- * {@link #toBytes} always writes v2.
+ * <p>
+ * Serialization is versioned: v1 = M2 values-only format ({@link #KV_SEP}/{@link #PAIR_SEP}-delimited); v2 = paths + edge-history + visibilities.
+ * {@link #fromBytes} accepts both versions for forward compat; {@link #toBytes} always writes v2.
  */
 public final class PathTuple {
 
@@ -64,8 +55,7 @@ public final class PathTuple {
     private final Map<String,Set<Long>> pathEdgeIds;
     private final List<ColumnVisibility> visibilities;
 
-    private PathTuple(Map<String,String> values, Map<String,List<PathElement>> paths, Map<String,Set<Long>> pathEdgeIds,
-                    List<ColumnVisibility> visibilities) {
+    private PathTuple(Map<String,String> values, Map<String,List<PathElement>> paths, Map<String,Set<Long>> pathEdgeIds, List<ColumnVisibility> visibilities) {
         this.values = Collections.unmodifiableMap(new LinkedHashMap<>(values));
         this.paths = freezePaths(paths);
         this.pathEdgeIds = freezeEdgeIds(pathEdgeIds);
@@ -120,11 +110,9 @@ public final class PathTuple {
     }
 
     /**
-     * Returns a new tuple whose bindings are the union of {@code this} and
-     * {@code other}. {@link #values} are unioned (other wins on key conflict,
-     * matching M2 semantics). {@link #paths} are concatenated (each side's
-     * elements appended in order). {@link #pathEdgeIds} are unioned per
-     * pathVar. {@link #visibilities} are concatenated.
+     * Returns a new tuple whose bindings are the union of {@code this} and {@code other}. {@link #values} are unioned (other wins on key conflict, matching M2
+     * semantics). {@link #paths} are concatenated (each side's elements appended in order). {@link #pathEdgeIds} are unioned per pathVar. {@link #visibilities}
+     * are concatenated.
      */
     public PathTuple merge(PathTuple other) {
         Objects.requireNonNull(other, "other");
@@ -247,6 +235,7 @@ public final class PathTuple {
 
     /**
      * Serializes as v2. Layout:
+     *
      * <pre>
      *   byte    version = 0x02
      *   int     valueCount

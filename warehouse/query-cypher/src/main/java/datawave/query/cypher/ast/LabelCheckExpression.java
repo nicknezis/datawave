@@ -1,8 +1,7 @@
 package datawave.query.cypher.ast;
 
 /**
- * A post-fix label assertion: {@code x:Label}. Produces a boolean indicating
- * whether the bound entity carries the given label.
+ * A post-fix label assertion: {@code x:Label}. Produces a boolean indicating whether the bound entity carries the given label.
  */
 public final class LabelCheckExpression extends Expression {
 

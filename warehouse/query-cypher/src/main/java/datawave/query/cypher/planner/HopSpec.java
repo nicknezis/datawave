@@ -11,15 +11,12 @@ import datawave.query.cypher.ast.RelationshipPattern.Direction;
 import datawave.query.cypher.mapping.RelMapping;
 
 /**
- * A single planned edge hop: source/sink endpoints, the edge type, the
- * Cypher pattern direction (which combined with the schema's stored
- * {@link datawave.query.cypher.mapping.EdgeDirection} drives undirected
- * canonicalization), and any equality filters on edge attributes.
+ * A single planned edge hop: source/sink endpoints, the edge type, the Cypher pattern direction (which combined with the schema's stored
+ * {@link datawave.query.cypher.mapping.EdgeDirection} drives undirected canonicalization), and any equality filters on edge attributes.
  *
- * <p>M3 additions: {@link #getLower}/{@link #getUpper} describe a
- * variable-length expansion bound (both present iff {@link #isVariableLength}).
- * {@link #getPathVariable} carries the enclosing pattern's path-variable name
- * so the executor can accumulate {@code MATCH p = ... RETURN p} geometry.
+ * <p>
+ * M3 additions: {@link #getLower}/{@link #getUpper} describe a variable-length expansion bound (both present iff {@link #isVariableLength}).
+ * {@link #getPathVariable} carries the enclosing pattern's path-variable name so the executor can accumulate {@code MATCH p = ... RETURN p} geometry.
  */
 public final class HopSpec {
 

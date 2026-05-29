@@ -1,8 +1,7 @@
 package datawave.query.cypher.ast;
 
 /**
- * The inline property-filter expression that follows a node or relationship
- * head, e.g. {@code {name: 'X', year: 2024}}. Only map literals and parameter
+ * The inline property-filter expression that follows a node or relationship head, e.g. {@code {name: 'X', year: 2024}}. Only map literals and parameter
  * references are legal positions.
  */
 public final class PropertiesExpression extends AstNode {

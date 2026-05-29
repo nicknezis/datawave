@@ -7,20 +7,13 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Typed literal value. The {@link Kind} tag lets consumers handle primitives
- * uniformly without instanceof ladders; {@code STRING}, {@code INTEGER},
+ * Typed literal value. The {@link Kind} tag lets consumers handle primitives uniformly without instanceof ladders; {@code STRING}, {@code INTEGER},
  * {@code DECIMAL}, {@code BOOLEAN}, {@code NULL}, {@code LIST}, {@code MAP}.
  */
 public final class LiteralExpression extends Expression {
 
     public enum Kind {
-        STRING,
-        INTEGER,
-        DECIMAL,
-        BOOLEAN,
-        NULL,
-        LIST,
-        MAP
+        STRING, INTEGER, DECIMAL, BOOLEAN, NULL, LIST, MAP
     }
 
     private final Kind kind;

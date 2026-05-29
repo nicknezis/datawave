@@ -13,10 +13,8 @@ import javax.xml.bind.annotation.adapters.XmlJavaTypeAdapter;
 import datawave.webservice.xml.util.StringMapAdapter;
 
 /**
- * One node or edge appearance inside a {@link CypherValue.PathValue}. A flat
- * record-of-strings keeps the wire shape simple: clients can render the
- * alternating node/edge sequence by walking {@link #getElements} on the
- * enclosing value and dispatching on {@link #getKind}.
+ * One node or edge appearance inside a {@link CypherValue.PathValue}. A flat record-of-strings keeps the wire shape simple: clients can render the alternating
+ * node/edge sequence by walking {@link #getElements} on the enclosing value and dispatching on {@link #getKind}.
  */
 @XmlAccessorType(XmlAccessType.NONE)
 public final class PathRecord implements Serializable {
@@ -24,8 +22,7 @@ public final class PathRecord implements Serializable {
     private static final long serialVersionUID = 1L;
 
     public enum Kind {
-        NODE,
-        EDGE
+        NODE, EDGE
     }
 
     @XmlElement(name = "Kind")

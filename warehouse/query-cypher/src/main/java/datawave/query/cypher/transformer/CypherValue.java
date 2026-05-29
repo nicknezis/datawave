@@ -7,25 +7,22 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
 
-
 import javax.xml.bind.annotation.XmlAccessType;
 import javax.xml.bind.annotation.XmlAccessorType;
 import javax.xml.bind.annotation.XmlElement;
 import javax.xml.bind.annotation.XmlSeeAlso;
 
 /**
- * A typed column value carried inside {@link CypherRow}. M3 widens the row's
- * column map from {@code Map<String,String>} to {@code Map<String,CypherValue>}
- * so that:
+ * A typed column value carried inside {@link CypherRow}. M3 widens the row's column map from {@code Map<String,String>} to {@code Map<String,CypherValue>} so
+ * that:
  * <ul>
- *   <li>numeric aggregate results ({@code count(*)}, {@code sum}, {@code avg})
- *       keep their type instead of being coerced to a string;</li>
- *   <li>{@code RETURN p} can carry a structured {@link PathValue}.</li>
+ * <li>numeric aggregate results ({@code count(*)}, {@code sum}, {@code avg}) keep their type instead of being coerced to a string;</li>
+ * <li>{@code RETURN p} can carry a structured {@link PathValue}.</li>
  * </ul>
  *
- * <p>The factory methods preserve M2-shaped output for the all-string case:
- * {@link #string(String)} produces a value that survives a JAXB round-trip
- * identically to the M2 string-only response.
+ * <p>
+ * The factory methods preserve M2-shaped output for the all-string case: {@link #string(String)} produces a value that survives a JAXB round-trip identically
+ * to the M2 string-only response.
  */
 @XmlAccessorType(XmlAccessType.NONE)
 @XmlSeeAlso({CypherValue.StringValue.class, CypherValue.LongValue.class, CypherValue.DecimalValue.class, CypherValue.PathValue.class})
@@ -34,10 +31,7 @@ public abstract class CypherValue implements Serializable {
     private static final long serialVersionUID = 1L;
 
     public enum Kind {
-        STRING,
-        LONG,
-        DECIMAL,
-        PATH
+        STRING, LONG, DECIMAL, PATH
     }
 
     public abstract Kind getKind();

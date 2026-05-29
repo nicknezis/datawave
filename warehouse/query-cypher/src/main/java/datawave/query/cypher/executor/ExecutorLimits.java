@@ -1,10 +1,8 @@
 package datawave.query.cypher.executor;
 
 /**
- * Per-query execution caps passed to {@link MultiHopExecutor} from
- * {@link datawave.query.cypher.config.CypherQueryConfiguration}. Bundling
- * them as one immutable record keeps {@code MultiHopExecutor}'s constructor
- * stable as more knobs are added.
+ * Per-query execution caps passed to {@link MultiHopExecutor} from {@link datawave.query.cypher.config.CypherQueryConfiguration}. Bundling them as one
+ * immutable record keeps {@code MultiHopExecutor}'s constructor stable as more knobs are added.
  */
 public final class ExecutorLimits {
 

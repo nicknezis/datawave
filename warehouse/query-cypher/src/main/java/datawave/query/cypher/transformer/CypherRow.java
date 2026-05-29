@@ -17,16 +17,13 @@ import javax.xml.bind.annotation.adapters.XmlJavaTypeAdapter;
 import datawave.webservice.xml.util.StringMapAdapter;
 
 /**
- * One result row produced by a Cypher query: an ordered map keyed by the
- * RETURN clause's exposed alias whose values are typed {@link CypherValue}s,
- * plus the combined column-visibility markings of every cell that
- * contributed to the row.
+ * One result row produced by a Cypher query: an ordered map keyed by the RETURN clause's exposed alias whose values are typed {@link CypherValue}s, plus the
+ * combined column-visibility markings of every cell that contributed to the row.
  *
- * <p>M3 widens column values from plain strings to {@link CypherValue} so
- * aggregate results keep their numeric type and {@code RETURN p} can carry
- * a structured {@link CypherValue.PathValue}. JAXB serialises the columns
- * as a list of {@link ColumnEntry} elements; in-memory access via
- * {@link #getColumns()} is the {@code Map<String,CypherValue>}.
+ * <p>
+ * M3 widens column values from plain strings to {@link CypherValue} so aggregate results keep their numeric type and {@code RETURN p} can carry a structured
+ * {@link CypherValue.PathValue}. JAXB serialises the columns as a list of {@link ColumnEntry} elements; in-memory access via {@link #getColumns()} is the
+ * {@code Map<String,CypherValue>}.
  */
 @XmlAccessorType(XmlAccessType.NONE)
 public final class CypherRow implements Serializable {

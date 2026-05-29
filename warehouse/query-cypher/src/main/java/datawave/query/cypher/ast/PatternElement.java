@@ -5,10 +5,8 @@ import java.util.Collections;
 import java.util.List;
 
 /**
- * Represents a chain of {@code (node)-[rel]->(node)-[rel]->(node)...} tokens.
- * Normalized so {@code nodes} always has exactly one more entry than
- * {@code relationships}; for a single-node pattern the relationships list is
- * empty.
+ * Represents a chain of {@code (node)-[rel]->(node)-[rel]->(node)...} tokens. Normalized so {@code nodes} always has exactly one more entry than
+ * {@code relationships}; for a single-node pattern the relationships list is empty.
  */
 public final class PatternElement extends AstNode {
 
