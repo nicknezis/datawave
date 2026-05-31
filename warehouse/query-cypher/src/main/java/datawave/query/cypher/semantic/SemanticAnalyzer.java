@@ -34,26 +34,15 @@ import datawave.query.cypher.ast.WithClause;
 /**
  * Scope resolver + binding-table builder for the M0 read-only Cypher subset.
  *
- * Rules enforced:
- *   - Every variable referenced in WHERE / projections / ORDER BY must be
- *     bound by an earlier MATCH in the same scope, or carried forward by a
- *     WITH projection.
- *   - A variable reused across pattern positions must keep its kind
- *     (NODE vs RELATIONSHIP vs PATH). Label / type sets are unioned across
- *     occurrences rather than intersected, matching Cypher's "additional
- *     label assertion" semantics.
- *   - Variable-length relationships {@code [*lo..hi]} must have lo >= 0 and
- *     hi >= lo when both are present. Unbounded forms ({@code [*]} or
- *     missing upper) are rejected as out of scope for v1.
- *   - Aggregating functions (COUNT/SUM/AVG/MIN/MAX/COLLECT) are forbidden
- *     in WHERE expressions but allowed in projection positions.
- *   - UNION branches must all RETURN, and is itself rejected as out of
- *     scope for M0 since no downstream planner consumes it yet.
+ * Rules enforced: - Every variable referenced in WHERE / projections / ORDER BY must be bound by an earlier MATCH in the same scope, or carried forward by a
+ * WITH projection. - A variable reused across pattern positions must keep its kind (NODE vs RELATIONSHIP vs PATH). Label / type sets are unioned across
+ * occurrences rather than intersected, matching Cypher's "additional label assertion" semantics. - Variable-length relationships {@code [*lo..hi]} must have lo
+ * >= 0 and hi >= lo when both are present. Unbounded forms ({@code [*]} or missing upper) are rejected as out of scope for v1. - Aggregating functions
+ * (COUNT/SUM/AVG/MIN/MAX/COLLECT) are forbidden in WHERE expressions but allowed in projection positions. - UNION branches must all RETURN, and is itself
+ * rejected as out of scope for M0 since no downstream planner consumes it yet.
  *
- * Intentionally NOT enforced in M0 (deferred to M1+):
- *   - Type inference over projection expressions.
- *   - Alignment of UNION branches' return columns (UNION is rejected).
- *   - Path-binding constraint propagation into RETURN shape.
+ * Intentionally NOT enforced in M0 (deferred to M1+): - Type inference over projection expressions. - Alignment of UNION branches' return columns (UNION is
+ * rejected). - Path-binding constraint propagation into RETURN shape.
  */
 public final class SemanticAnalyzer {
 
@@ -152,8 +141,8 @@ public final class SemanticAnalyzer {
         }
         Binding prev = existing.get();
         if (prev.getType() != type) {
-            issues.add(new SemanticException.Issue(location, "variable '" + name + "' is already bound as " + prev.getType() + " at " + prev.getFirstSeen()
-                            + "; cannot rebind as " + type));
+            issues.add(new SemanticException.Issue(location,
+                            "variable '" + name + "' is already bound as " + prev.getType() + " at " + prev.getFirstSeen() + "; cannot rebind as " + type));
             return;
         }
         if (!labelsOrTypes.isEmpty()) {
@@ -203,8 +192,7 @@ public final class SemanticAnalyzer {
             analyzeExpression(source, item.getExpression(), ExpressionContext.PROJECTION);
             Optional<String> exposed = item.getExposedName();
             if (!exposed.isPresent()) {
-                issues.add(new SemanticException.Issue(item.getLocation(),
-                                "projection expression has no implicit name; add an alias with 'AS <name>'"));
+                issues.add(new SemanticException.Issue(item.getLocation(), "projection expression has no implicit name; add an alias with 'AS <name>'"));
                 continue;
             }
             String name = exposed.get();
@@ -232,10 +220,7 @@ public final class SemanticAnalyzer {
     // ---------- Expressions --------------------------------------------
 
     private enum ExpressionContext {
-        WHERE,
-        PROJECTION,
-        ORDER_BY,
-        PATTERN_PROPERTY
+        WHERE, PROJECTION, ORDER_BY, PATTERN_PROPERTY
     }
 
     private void analyzeExpression(Scope scope, Expression expr, ExpressionContext context) {

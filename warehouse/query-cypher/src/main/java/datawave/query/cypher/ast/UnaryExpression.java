@@ -3,9 +3,7 @@ package datawave.query.cypher.ast;
 public final class UnaryExpression extends Expression {
 
     public enum Operator {
-        NEGATE("-"),
-        POSITIVE("+"),
-        NOT("NOT");
+        NEGATE("-"), POSITIVE("+"), NOT("NOT");
 
         private final String symbol;
 

@@ -10,16 +10,12 @@ import datawave.query.cypher.physical.HopTranslation;
 import datawave.query.cypher.planner.CypherPlan;
 
 /**
- * Carries the planned-and-translated artifacts for a Cypher query through
- * the {@code initialize()} → {@code setupQuery()} → {@code getTransformer()}
- * lifecycle.
+ * Carries the planned-and-translated artifacts for a Cypher query through the {@code initialize()} → {@code setupQuery()} → {@code getTransformer()} lifecycle.
  *
- * <p>The plan and hop translations are populated by
- * {@code CypherQueryLogic.initialize()} and consumed by both
- * {@code setupQuery()} (for ranges + filter JEXL) and the transformer (for
- * projection metadata). The result tuples are populated by
- * {@code setupQuery()} (after the full hop chain executes) and consumed by
- * the transformer.
+ * <p>
+ * The plan and hop translations are populated by {@code CypherQueryLogic.initialize()} and consumed by both {@code setupQuery()} (for ranges + filter JEXL) and
+ * the transformer (for projection metadata). The result tuples are populated by {@code setupQuery()} (after the full hop chain executes) and consumed by the
+ * transformer.
  */
 public class CypherQueryConfiguration extends GenericQueryConfiguration {
 
@@ -28,20 +24,30 @@ public class CypherQueryConfiguration extends GenericQueryConfiguration {
     /** Cypher query text as supplied by the caller. */
     private String cypherText;
 
+    /** Maximum allowed upper bound on a variable-length pattern {@code [*lo..hi]}; bigger queries reject at plan time. */
+    private int maxVariableLengthUpper = 5;
+
+    /** Maximum frontier size at any BFS step; exceeding throws. */
+    private int maxFrontierSize = 100_000;
+
+    /** Maximum number of distinct aggregation groups; exceeding throws (no silent eviction). */
+    private int maxAggregateGroups = 100_000;
+
+    /** Per-path edge-trail history cap inside a single variable-length expansion. */
+    private int maxPathEdgeHistory = 64;
+
     /** Resolved logical plan (transient — rebuilt on resume). */
     private transient CypherPlan plan;
 
     /**
-     * One pre-built translation per hop (index 0 = first hop).
-     * Subsequent hops are re-translated at scan time with frontier values.
-     * Transient — derived from the plan.
+     * One pre-built translation per hop (index 0 = first hop). Subsequent hops are re-translated at scan time with frontier values. Transient — derived from
+     * the plan.
      */
     private transient List<HopTranslation> hopTranslations = Collections.emptyList();
 
     /**
-     * Fully post-processed result tuples (after multi-hop join, enrichment,
-     * DISTINCT, ORDER BY, SKIP). Populated by {@code setupQuery()} and
-     * consumed by the iterator + transformer. Transient.
+     * Fully post-processed result tuples (after multi-hop join, enrichment, DISTINCT, ORDER BY, SKIP). Populated by {@code setupQuery()} and consumed by the
+     * iterator + transformer. Transient.
      */
     private transient List<PathTuple> resultTuples = Collections.emptyList();
 
@@ -59,6 +65,10 @@ public class CypherQueryConfiguration extends GenericQueryConfiguration {
         this.plan = other.plan;
         this.hopTranslations = other.hopTranslations;
         this.resultTuples = other.resultTuples;
+        this.maxVariableLengthUpper = other.maxVariableLengthUpper;
+        this.maxFrontierSize = other.maxFrontierSize;
+        this.maxAggregateGroups = other.maxAggregateGroups;
+        this.maxPathEdgeHistory = other.maxPathEdgeHistory;
     }
 
     public String getCypherText() {
@@ -107,5 +117,37 @@ public class CypherQueryConfiguration extends GenericQueryConfiguration {
 
     public void setResultTuples(List<PathTuple> resultTuples) {
         this.resultTuples = resultTuples == null ? Collections.emptyList() : Collections.unmodifiableList(resultTuples);
+    }
+
+    public int getMaxVariableLengthUpper() {
+        return maxVariableLengthUpper;
+    }
+
+    public void setMaxVariableLengthUpper(int maxVariableLengthUpper) {
+        this.maxVariableLengthUpper = maxVariableLengthUpper;
+    }
+
+    public int getMaxFrontierSize() {
+        return maxFrontierSize;
+    }
+
+    public void setMaxFrontierSize(int maxFrontierSize) {
+        this.maxFrontierSize = maxFrontierSize;
+    }
+
+    public int getMaxAggregateGroups() {
+        return maxAggregateGroups;
+    }
+
+    public void setMaxAggregateGroups(int maxAggregateGroups) {
+        this.maxAggregateGroups = maxAggregateGroups;
+    }
+
+    public int getMaxPathEdgeHistory() {
+        return maxPathEdgeHistory;
+    }
+
+    public void setMaxPathEdgeHistory(int maxPathEdgeHistory) {
+        this.maxPathEdgeHistory = maxPathEdgeHistory;
     }
 }

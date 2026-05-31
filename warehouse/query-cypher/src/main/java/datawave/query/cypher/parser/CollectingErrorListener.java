@@ -11,9 +11,8 @@ import org.antlr.v4.runtime.Recognizer;
 import datawave.query.cypher.ast.SourceLocation;
 
 /**
- * ANTLR error listener that accumulates lexer/parser errors instead of
- * printing them to stderr, so the facade can surface them all at once as a
- * single {@link CypherSyntaxException}.
+ * ANTLR error listener that accumulates lexer/parser errors instead of printing them to stderr, so the facade can surface them all at once as a single
+ * {@link CypherSyntaxException}.
  */
 final class CollectingErrorListener extends BaseErrorListener {
 
@@ -29,9 +28,8 @@ final class CollectingErrorListener extends BaseErrorListener {
     }
 
     /**
-     * Returns a snapshot copy of the errors collected so far. The internal
-     * buffer is intentionally left intact, since this listener is constructed
-     * fresh per parse and then discarded; the name reflects that.
+     * Returns a snapshot copy of the errors collected so far. The internal buffer is intentionally left intact, since this listener is constructed fresh per
+     * parse and then discarded; the name reflects that.
      */
     List<CypherSyntaxException.ParseMessage> snapshot() {
         return Collections.unmodifiableList(new ArrayList<>(messages));

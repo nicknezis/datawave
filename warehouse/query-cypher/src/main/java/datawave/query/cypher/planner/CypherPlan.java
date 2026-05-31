@@ -8,12 +8,11 @@ import java.util.Optional;
 import java.util.OptionalLong;
 
 /**
- * The M2 logical plan: an ordered list of {@link HopSpec hops} (one per
- * relationship in the query), the RETURN projection list, an optional LIMIT,
- * and the ORDER BY / SKIP / DISTINCT post-processing directives.
+ * The M2 logical plan: an ordered list of {@link HopSpec hops} (one per relationship in the query), the RETURN projection list, an optional LIMIT, and the
+ * ORDER BY / SKIP / DISTINCT post-processing directives.
  *
- * <p>Single-hop queries produce a plan with exactly one hop; the
- * {@link #getFirstHop()} convenience covers that common case.
+ * <p>
+ * Single-hop queries produce a plan with exactly one hop; the {@link #getFirstHop()} convenience covers that common case.
  */
 public final class CypherPlan {
 
@@ -24,9 +23,16 @@ public final class CypherPlan {
     private final boolean distinct;
     private final List<SortSpec> orderBy;
     private final long schemaVersion;
+    private final GroupingSpec groupingSpec;
 
-    public CypherPlan(List<HopSpec> hops, List<Projection> projections, Long limit, Long skip,
-                    boolean distinct, List<SortSpec> orderBy, long schemaVersion) {
+    /** M2 constructor — no aggregation. */
+    public CypherPlan(List<HopSpec> hops, List<Projection> projections, Long limit, Long skip, boolean distinct, List<SortSpec> orderBy, long schemaVersion) {
+        this(hops, projections, limit, skip, distinct, orderBy, schemaVersion, null);
+    }
+
+    /** M3 constructor — optional {@link GroupingSpec} for aggregating RETURN. */
+    public CypherPlan(List<HopSpec> hops, List<Projection> projections, Long limit, Long skip, boolean distinct, List<SortSpec> orderBy, long schemaVersion,
+                    GroupingSpec groupingSpec) {
         if (Objects.requireNonNull(hops, "hops").isEmpty()) {
             throw new IllegalArgumentException("plan must have at least one hop");
         }
@@ -37,6 +43,7 @@ public final class CypherPlan {
         this.distinct = distinct;
         this.orderBy = Collections.unmodifiableList(new ArrayList<>(orderBy));
         this.schemaVersion = schemaVersion;
+        this.groupingSpec = groupingSpec;
     }
 
     /** All hops in traversal order (hop 0 is executed first). */
@@ -83,5 +90,9 @@ public final class CypherPlan {
 
     public long getSchemaVersion() {
         return schemaVersion;
+    }
+
+    public Optional<GroupingSpec> getGroupingSpec() {
+        return Optional.ofNullable(groupingSpec);
     }
 }

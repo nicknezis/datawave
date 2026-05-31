@@ -3,8 +3,7 @@ package datawave.query.cypher.ast;
 import java.util.Objects;
 
 /**
- * Source position of an AST node in the original Cypher text. Line and column
- * are 1-based and track ANTLR's conventions.
+ * Source position of an AST node in the original Cypher text. Line and column are 1-based and track ANTLR's conventions.
  */
 public final class SourceLocation {
 

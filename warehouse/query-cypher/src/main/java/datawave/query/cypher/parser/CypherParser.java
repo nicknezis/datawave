@@ -10,12 +10,9 @@ import datawave.query.cypher.parser.antlr.CypherLexer;
 import datawave.query.cypher.parser.antlr.CypherParser.CypherContext;
 
 /**
- * Public entry point to the M0 Cypher front-end: turns a query string into a
- * {@link CypherQuery} AST, surfacing all syntax errors at once through
- * {@link CypherSyntaxException}. Downstream semantic analysis lives in
- * {@link datawave.query.cypher.semantic.SemanticAnalyzer} and is intentionally
- * invoked separately so callers can choose to pretty-print or otherwise
- * inspect the raw AST before accepting it as valid.
+ * Public entry point to the M0 Cypher front-end: turns a query string into a {@link CypherQuery} AST, surfacing all syntax errors at once through
+ * {@link CypherSyntaxException}. Downstream semantic analysis lives in {@link datawave.query.cypher.semantic.SemanticAnalyzer} and is intentionally invoked
+ * separately so callers can choose to pretty-print or otherwise inspect the raw AST before accepting it as valid.
  */
 public final class CypherParser {
 

@@ -8,12 +8,9 @@ import java.util.Set;
 import org.apache.accumulo.core.data.Range;
 
 /**
- * The Accumulo-side scan plan for a single {@link datawave.query.cypher.planner.HopSpec hop}:
- * the set of row {@link Range}s to seek over, the JEXL string the
- * {@link datawave.query.iterator.filter.EdgeFilterIterator} will evaluate
- * against each candidate cell, and a flag indicating whether scan-time
- * source/sink swap was used (which the transformer reverses so emitted
- * Cypher rows still bind the user's original source/sink variable names).
+ * The Accumulo-side scan plan for a single {@link datawave.query.cypher.planner.HopSpec hop}: the set of row {@link Range}s to seek over, the JEXL string the
+ * {@link datawave.query.iterator.filter.EdgeFilterIterator} will evaluate against each candidate cell, and a flag indicating whether scan-time source/sink swap
+ * was used (which the transformer reverses so emitted Cypher rows still bind the user's original source/sink variable names).
  */
 public final class HopTranslation {
 
@@ -36,10 +33,8 @@ public final class HopTranslation {
     }
 
     /**
-     * True when the planner took advantage of an undirected (bidirectional)
-     * edge type to swap "filter on sink" into "filter on source", giving an
-     * efficient row-keyed scan. The transformer must un-swap so emitted
-     * tuples bind the user's original Cypher source/sink variables.
+     * True when the planner took advantage of an undirected (bidirectional) edge type to swap "filter on sink" into "filter on source", giving an efficient
+     * row-keyed scan. The transformer must un-swap so emitted tuples bind the user's original Cypher source/sink variables.
      */
     public boolean isSwappedEndpoints() {
         return swappedEndpoints;

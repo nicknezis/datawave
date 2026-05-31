@@ -6,8 +6,7 @@ import java.util.List;
 import datawave.query.cypher.ast.SourceLocation;
 
 /**
- * Thrown when the input text fails to parse against the Cypher grammar. Carries
- * the list of collected {@link ParseMessage}s so callers can surface every
+ * Thrown when the input text fails to parse against the Cypher grammar. Carries the list of collected {@link ParseMessage}s so callers can surface every
  * problem at once instead of whack-a-mole through repeated parse attempts.
  */
 public class CypherSyntaxException extends RuntimeException {

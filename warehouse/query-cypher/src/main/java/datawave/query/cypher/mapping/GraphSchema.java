@@ -9,16 +9,13 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The Cypher-to-DataWave graph schema. Owns the alias translation between
- * Cypher labels/types and on-disk dataTypes, fields, and edge types.
+ * The Cypher-to-DataWave graph schema. Owns the alias translation between Cypher labels/types and on-disk dataTypes, fields, and edge types.
  * <p>
- * Per feasibility plan decision #9, this is the single source of truth for
- * Cypher property → on-disk field translation; we do not pass through
+ * Per feasibility plan decision #9, this is the single source of truth for Cypher property → on-disk field translation; we do not pass through
  * {@code QueryModel}/{@code EdgeQueryModel} in the Cypher logic.
  * <p>
- * Hot reload (decision #5) is a M4 deliverable. M1 loads the schema once
- * at logic init and snapshots a {@link #getVersion()} that the planner
- * pins for the query's lifetime.
+ * Hot reload (decision #5) is a M4 deliverable. M1 loads the schema once at logic init and snapshots a {@link #getVersion()} that the planner pins for the
+ * query's lifetime.
  */
 public final class GraphSchema {
 

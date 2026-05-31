@@ -38,9 +38,8 @@ public class HopTranslatorTest {
 
     @Test
     public void sourceOnlyFilterBuildsRowPrefixRange() {
-        HopTranslation t = translator.translate(planner
-                        .plan(frontEnd.analyze("MATCH (a:Actor {name:'jerry'})-[:COSTAR_OF]-(b:Actor) RETURN b.name AS x"))
-                        .getHop());
+        HopTranslation t = translator
+                        .translate(planner.plan(frontEnd.analyze("MATCH (a:Actor {name:'jerry'})-[:COSTAR_OF]-(b:Actor) RETURN b.name AS x")).getHop());
         assertThat(t.isSwappedEndpoints()).isFalse();
         assertThat(t.getFilterJexl()).isEqualTo("EDGE_TYPE == 'tv_costars' && EDGE_SOURCE == 'jerry'");
         assertThat(t.getRanges()).hasSize(1);
@@ -51,9 +50,8 @@ public class HopTranslatorTest {
 
     @Test
     public void bothEndpointsFilteredBuildsExactRowRange() {
-        HopTranslation t = translator.translate(planner.plan(frontEnd
-                        .analyze("MATCH (a:Actor {name:'jerry'})-[:COSTAR_OF]-(b:Actor {name:'kramer'}) RETURN b.name AS x"))
-                        .getHop());
+        HopTranslation t = translator.translate(
+                        planner.plan(frontEnd.analyze("MATCH (a:Actor {name:'jerry'})-[:COSTAR_OF]-(b:Actor {name:'kramer'}) RETURN b.name AS x")).getHop());
         Range r = t.getRanges().iterator().next();
         assertThat(r.getStartKey().getRow().toString()).isEqualTo("jerry\u0000kramer");
         assertThat(r.getEndKey().getRow().toString()).isEqualTo("jerry\u0000kramer\u0000");
@@ -62,17 +60,16 @@ public class HopTranslatorTest {
 
     @Test
     public void edgeAttributeFilterAppearsInJexl() {
-        HopTranslation t = translator.translate(planner.plan(frontEnd.analyze(
-                        "MATCH (a:Actor {name:'jerry'})-[r:COSTAR_OF]-(b:Actor) WHERE r.show = 'Seinfeld' RETURN b.name AS x"))
-                        .getHop());
+        HopTranslation t = translator.translate(
+                        planner.plan(frontEnd.analyze("MATCH (a:Actor {name:'jerry'})-[r:COSTAR_OF]-(b:Actor) WHERE r.show = 'Seinfeld' RETURN b.name AS x"))
+                                        .getHop());
         assertThat(t.getFilterJexl()).contains("EDGE_ATTRIBUTE2 == 'seinfeld'");
     }
 
     @Test
     public void undirectedSinkOnlyFilterPivotsToSourceForEfficientScan() {
-        HopTranslation t = translator.translate(planner.plan(frontEnd
-                        .analyze("MATCH (a:Actor)-[:COSTAR_OF]-(b:Actor {name:'kramer'}) RETURN a.name AS x"))
-                        .getHop());
+        HopTranslation t = translator
+                        .translate(planner.plan(frontEnd.analyze("MATCH (a:Actor)-[:COSTAR_OF]-(b:Actor {name:'kramer'}) RETURN a.name AS x")).getHop());
         assertThat(t.isSwappedEndpoints()).isTrue();
         assertThat(t.getFilterJexl()).contains("EDGE_SOURCE == 'kramer'");
         Range r = t.getRanges().iterator().next();
@@ -81,9 +78,8 @@ public class HopTranslatorTest {
 
     @Test
     public void escapesQuotesInLiteralValues() {
-        HopTranslation t = translator.translate(planner.plan(frontEnd
-                        .analyze("MATCH (a:Actor {name:\"o'brien\"})-[:COSTAR_OF]-(b:Actor) RETURN b.name AS x"))
-                        .getHop());
+        HopTranslation t = translator
+                        .translate(planner.plan(frontEnd.analyze("MATCH (a:Actor {name:\"o'brien\"})-[:COSTAR_OF]-(b:Actor) RETURN b.name AS x")).getHop());
         assertThat(t.getFilterJexl()).contains("EDGE_SOURCE == 'o\\'brien'");
     }
 }

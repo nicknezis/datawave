@@ -9,12 +9,9 @@ import org.springframework.context.support.FileSystemXmlApplicationContext;
 /**
  * Loads a {@link GraphSchema} from a Spring XML descriptor.
  * <p>
- * The descriptor declares {@link NodeMapping} beans and {@link RelMapping}
- * beans; this loader collects all such beans from the context and assembles
- * a {@code GraphSchema}. Following the {@code DefaultEdgeModelFieldsFactory}
- * convention, the descriptor location can be overridden by the
- * {@code cypher.graph.schema.path} system property pointing at an absolute
- * file URL — useful for local development and IDE debugging.
+ * The descriptor declares {@link NodeMapping} beans and {@link RelMapping} beans; this loader collects all such beans from the context and assembles a
+ * {@code GraphSchema}. Following the {@code DefaultEdgeModelFieldsFactory} convention, the descriptor location can be overridden by the
+ * {@code cypher.graph.schema.path} system property pointing at an absolute file URL — useful for local development and IDE debugging.
  */
 public final class GraphSchemaLoader {
 
@@ -25,9 +22,8 @@ public final class GraphSchemaLoader {
     private GraphSchemaLoader() {}
 
     /**
-     * Loads from the given classpath resource (typically
-     * {@code config/cypher-graph-schema.xml}) or from the override file URL
-     * named by {@link #SYSTEM_PROPERTY}.
+     * Loads from the given classpath resource (typically {@code config/cypher-graph-schema.xml}) or from the override file URL named by
+     * {@link #SYSTEM_PROPERTY}.
      */
     public static GraphSchema load(String classpathResource) {
         String override = System.getProperty(SYSTEM_PROPERTY);

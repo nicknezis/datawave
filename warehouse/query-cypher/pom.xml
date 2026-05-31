@@ -9,18 +9,51 @@
     <artifactId>datawave-query-cypher</artifactId>
     <packaging>jar</packaging>
     <name>${project.artifactId}</name>
-    <description>
-        Cypher graph-query front-end for DataWave. M0: ANTLR4 lexer/parser
+    <description>Cypher graph-query front-end for DataWave. M0: ANTLR4 lexer/parser
         for a read-only Cypher subset, AST, and a minimal semantic analyzer.
         M1: graph-schema mapping, single-hop logical planner, JEXL hop
         translator that builds Accumulo ranges directly, and a
         CypherQueryLogic that runs single-hop MATCH/WHERE/RETURN end-to-end
-        against the edge table.
-    </description>
+        against the edge table. M2: fixed-length multi-hop, WITH, ORDER BY,
+        SKIP, DISTINCT, and non-identity node properties via the
+        ShardEnrichmentService interface. M3: bounded variable-length
+        patterns [*lo..hi] via client-orchestrated BFS, streaming
+        aggregation (COUNT / COUNT(*) / COUNT(DISTINCT) / SUM / AVG /
+        MIN / MAX), and path binding in RETURN (MATCH p = ... RETURN p)
+        materialised as a typed CypherValue.PathValue.  Composite-row
+        visibilities are composed across hops via MarkingFunctions.</description>
     <properties>
         <version.antlr4>4.13.1</version.antlr4>
     </properties>
     <dependencies>
+        <dependency>
+            <groupId>com.google.guava</groupId>
+            <artifactId>guava</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>gov.nsa.datawave</groupId>
+            <artifactId>datawave-core</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>gov.nsa.datawave</groupId>
+            <artifactId>datawave-query-core</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>gov.nsa.datawave.core</groupId>
+            <artifactId>datawave-core-common</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>gov.nsa.datawave.core</groupId>
+            <artifactId>datawave-core-query</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>gov.nsa.datawave.webservices</groupId>
+            <artifactId>datawave-ws-client</artifactId>
+        </dependency>
         <dependency>
             <groupId>org.antlr</groupId>
             <artifactId>antlr4-runtime</artifactId>
@@ -29,10 +62,6 @@
         <dependency>
             <groupId>org.apache.accumulo</groupId>
             <artifactId>accumulo-core</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>com.google.guava</groupId>
-            <artifactId>guava</artifactId>
         </dependency>
         <dependency>
             <groupId>org.slf4j</groupId>
@@ -44,27 +73,8 @@
         </dependency>
         <dependency>
             <groupId>gov.nsa.datawave</groupId>
-            <artifactId>datawave-core</artifactId>
-            <version>${project.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>gov.nsa.datawave.core</groupId>
-            <artifactId>datawave-core-query</artifactId>
-            <version>${project.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>gov.nsa.datawave.core</groupId>
-            <artifactId>datawave-core-common</artifactId>
-            <version>${project.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>gov.nsa.datawave</groupId>
-            <artifactId>datawave-query-core</artifactId>
-            <version>${project.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>gov.nsa.datawave.webservices</groupId>
-            <artifactId>datawave-ws-client</artifactId>
+            <artifactId>datawave-in-memory-accumulo</artifactId>
+            <scope>test</scope>
         </dependency>
         <!-- test scope -->
         <dependency>
@@ -75,11 +85,6 @@
         <dependency>
             <groupId>org.assertj</groupId>
             <artifactId>assertj-core</artifactId>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>gov.nsa.datawave</groupId>
-            <artifactId>datawave-in-memory-accumulo</artifactId>
             <scope>test</scope>
         </dependency>
     </dependencies>

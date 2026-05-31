@@ -26,6 +26,7 @@ import datawave.query.cypher.physical.HopTranslation;
 import datawave.query.cypher.physical.HopTranslator;
 import datawave.query.cypher.planner.CypherPlan;
 import datawave.query.cypher.planner.CypherUnsupportedException;
+import datawave.query.cypher.planner.GroupingSpec;
 import datawave.query.cypher.planner.HopSpec;
 import datawave.query.cypher.planner.NodeBinding;
 import datawave.query.cypher.planner.Projection;
@@ -36,21 +37,24 @@ import datawave.query.util.QueryScannerHelper;
 /**
  * Executes a multi-hop {@link CypherPlan} against the edge table.
  *
- * <p>Algorithm:
+ * <p>
+ * M3 algorithm:
  * <ol>
- *   <li>Hop 0: scan with the plan's literal identity filters; collect
- *       {@link PathTuple}s.</li>
- *   <li>Hop N (N &gt; 0): derive the frontier (unique source-node values from
- *       the previous hop's sinks), re-translate the hop with
- *       {@link HopTranslator#translate(HopSpec, Set)}, scan, and join
- *       on the shared junction variable via an in-memory hash index.</li>
- *   <li>Post-process: optionally run shard enrichment, then apply
- *       DISTINCT, ORDER BY, SKIP (in that order). The caller applies LIMIT.</li>
+ * <li>Hop 0: scan with the plan's literal identity filters (or, when hop 0 is variable-length, delegate to {@link VariableLengthExpander} to drive the BFS from
+ * the literal frontier).</li>
+ * <li>Hop N (N &gt; 0): derive the frontier (unique source-node values from the previous hop's sinks), and either translate-and-scan once (fixed length) or
+ * delegate to {@link VariableLengthExpander} (when {@link HopSpec#isVariableLength()}).</li>
+ * <li>Post-process: optionally run shard enrichment, fold through {@link StreamingAggregator} if the plan carries a {@link GroupingSpec}, then apply DISTINCT,
+ * ORDER BY, SKIP (in that order). The caller applies LIMIT.</li>
  * </ol>
  *
- * <p>All intermediate results are held in memory (multi-hop join is inherently
- * in-memory). LIMIT from the plan is enforced by the caller via
- * {@code Iterators.limit()} on the resulting iterator.
+ * <p>
+ * Every contributing edge cell's {@link org.apache.accumulo.core.security.ColumnVisibility} is carried on the {@link PathTuple} so the transformer can compose
+ * composite visibilities via {@link datawave.marking.MarkingFunctions#combine}.
+ *
+ * <p>
+ * Executor remains one-shot in M3 — checkpointing across BFS boundaries is deferred. The moment this becomes streaming, the BFS frontier + per-path edge-trail
+ * history must be added to a serialisable checkpoint state.
  */
 public final class MultiHopExecutor {
 
@@ -65,9 +69,15 @@ public final class MultiHopExecutor {
     private final Query query;
     private final HopTranslator hopTranslator;
     private final ShardEnrichmentService enrichmentService;
+    private final ExecutorLimits limits;
 
-    public MultiHopExecutor(AccumuloClient client, Set<Authorizations> auths, String tableName, int queryThreads, Query query,
-                    HopTranslator hopTranslator, ShardEnrichmentService enrichmentService) {
+    public MultiHopExecutor(AccumuloClient client, Set<Authorizations> auths, String tableName, int queryThreads, Query query, HopTranslator hopTranslator,
+                    ShardEnrichmentService enrichmentService) {
+        this(client, auths, tableName, queryThreads, query, hopTranslator, enrichmentService, ExecutorLimits.DEFAULTS);
+    }
+
+    public MultiHopExecutor(AccumuloClient client, Set<Authorizations> auths, String tableName, int queryThreads, Query query, HopTranslator hopTranslator,
+                    ShardEnrichmentService enrichmentService, ExecutorLimits limits) {
         this.client = client;
         this.auths = auths;
         this.tableName = tableName;
@@ -75,119 +85,49 @@ public final class MultiHopExecutor {
         this.query = query;
         this.hopTranslator = hopTranslator;
         this.enrichmentService = enrichmentService;
+        this.limits = limits == null ? ExecutorLimits.DEFAULTS : limits;
     }
 
     /**
-     * Executes all hops and returns the fully post-processed result list
-     * (DISTINCT + ORDER BY + SKIP applied; LIMIT is applied by the caller).
+     * Executes all hops and returns the fully post-processed result list (aggregation + DISTINCT + ORDER BY + SKIP applied; LIMIT is applied by the caller).
      *
-     * @param plan the logical plan
-     * @param initialTranslations the pre-built {@link HopTranslation} for the
-     *        first hop (built from the plan's literal filters); subsequent hops
-     *        are translated at runtime using the current frontier values
+     * @param plan
+     *            the logical plan
+     * @param initialTranslations
+     *            the pre-built {@link HopTranslation} for the first hop when it is fixed-length; may be {@code null} or empty when hop 0 is variable-length
+     *            (translations are built per BFS step from the literal frontier instead)
      */
     public List<PathTuple> execute(CypherPlan plan, List<HopTranslation> initialTranslations) throws Exception {
         List<HopSpec> hops = plan.getHops();
-        if (!hops.isEmpty() && (initialTranslations == null || initialTranslations.isEmpty())) {
-            throw new IllegalArgumentException("initialTranslations must contain the first hop translation when the plan has hops");
-        }
         List<PathTuple> current = new ArrayList<>();
+        VariableLengthExpander expander = new VariableLengthExpander(hopTranslator, this::scanEdges, this::buildTupleFromEdge, limits);
 
         for (int i = 0; i < hops.size(); i++) {
             HopSpec hop = hops.get(i);
-            HopTranslation translation;
-            // The shared variable connecting this hop to the previous results.
-            // Determined for i > 0; null for the first hop.
-            String junctionVar = null;
 
             if (i == 0) {
-                translation = initialTranslations.get(0);
+                current = executeFirstHop(hop, initialTranslations, expander);
             } else {
-                // Short-circuit: if no results so far, nothing to expand.
                 if (current.isEmpty()) {
                     return new ArrayList<>();
                 }
-                // Determine the junction variable: the endpoint of this hop that is
-                // already bound in the previous tuples. It can be either the source
-                // or sink of the current hop (e.g. (a)-[:R]->(b)<-[:R]-(c) where
-                // hop 1 has source=c, sink=b and b is the junction from hop 0).
-                String hopSourceVar = hop.getSource().getVariable();
-                String hopSinkVar = hop.getSink().getVariable();
-                Set<String> prevBoundVars = current.get(0).keys();  // current is non-empty
-
-                boolean junctionIsHopSource;
-                if (prevBoundVars.contains(hopSourceVar)) {
-                    junctionVar = hopSourceVar;
-                    junctionIsHopSource = true;
-                } else if (prevBoundVars.contains(hopSinkVar)) {
-                    junctionVar = hopSinkVar;
-                    junctionIsHopSource = false;
-                } else {
-                    throw new CypherUnsupportedException("hop " + i + " shares no variable with the prior results; "
-                                    + "disconnected patterns are not supported in M2");
-                }
-
-                Set<String> frontier = buildFrontier(current, junctionVar);
-                // Intersect with any literal identity filters on the junction endpoint
-                // (e.g., from WITH WHERE or inline node properties), so that paths
-                // through disallowed junction values are not expanded.
-                NodeBinding junctionBinding = junctionIsHopSource ? hop.getSource() : hop.getSink();
-                Map<String,String> junctionIdentityEquals = junctionBinding.getIdentityEquals();
-                if (!junctionIdentityEquals.isEmpty()) {
-                    frontier.retainAll(junctionIdentityEquals.values());
-                }
-                if (frontier.isEmpty()) {
-                    return new ArrayList<>();
-                }
-
-                if (junctionIsHopSource) {
-                    translation = hopTranslator.translate(hop, frontier);
-                } else {
-                    // Junction is the sink of this hop: use sink-frontier translation.
-                    // This requires an undirected relationship (throws otherwise).
-                    translation = hopTranslator.translateWithSinkFrontier(hop, frontier);
-                }
+                current = executeSubsequentHop(hop, current, expander, i);
             }
 
-            List<Map.Entry<Key,Value>> edgeRows = scanEdges(translation);
-
-            if (i == 0) {
-                for (Map.Entry<Key,Value> row : edgeRows) {
-                    PathTuple t = buildTupleFromEdge(hop, translation, row);
-                    if (t != null) {
-                        current.add(t);
-                    }
-                }
-            } else {
-                Map<String,List<PathTuple>> index = buildIndex(current, junctionVar);
-                List<PathTuple> expanded = new ArrayList<>();
-                for (Map.Entry<Key,Value> row : edgeRows) {
-                    PathTuple edgeTuple = buildTupleFromEdge(hop, translation, row);
-                    if (edgeTuple == null) {
-                        continue;
-                    }
-                    String junctionValue = edgeTuple.get(junctionVar);
-                    List<PathTuple> matching = index.get(junctionValue);
-                    if (matching != null) {
-                        for (PathTuple prev : matching) {
-                            expanded.add(prev.merge(edgeTuple));
-                        }
-                    }
-                }
-                current = expanded;
+            if (current.isEmpty()) {
+                return new ArrayList<>();
             }
         }
 
         // Shard enrichment for NODE_SHARD_PROPERTY projections.
-        boolean needsEnrichment = false;
-        for (Projection p : plan.getProjections()) {
-            if (p.getKind() == Projection.Kind.NODE_SHARD_PROPERTY) {
-                needsEnrichment = true;
-                break;
-            }
-        }
-        if (needsEnrichment) {
+        if (needsEnrichment(plan)) {
             current = enrich(current, plan);
+        }
+
+        // Streaming aggregation (M3).
+        if (plan.getGroupingSpec().isPresent()) {
+            StreamingAggregator aggregator = new StreamingAggregator(plan.getGroupingSpec().get(), limits.getMaxAggregateGroups());
+            current = aggregator.aggregate(current);
         }
 
         // DISTINCT — deduplicate on projected column values.
@@ -209,23 +149,193 @@ public final class MultiHopExecutor {
         return current;
     }
 
+    private List<PathTuple> executeFirstHop(HopSpec hop, List<HopTranslation> initialTranslations, VariableLengthExpander expander) throws Exception {
+        if (hop.isVariableLength()) {
+            // Build the literal source-frontier from the plan's identity equals and
+            // drive BFS from there. The literal-frontier "incoming" is one tuple per
+            // source identity value, binding the hop's source variable.
+            List<PathTuple> seed = buildLiteralFrontierTuples(hop);
+            if (seed.isEmpty()) {
+                throw new CypherUnsupportedException("variable-length hop 0 requires a literal identity filter on its source endpoint");
+            }
+            return expander.expand(hop, seed, hop.getSource().getVariable(), true);
+        }
+        if (initialTranslations == null || initialTranslations.isEmpty()) {
+            throw new IllegalArgumentException("initialTranslations must contain the first hop translation when the plan's first hop is fixed-length");
+        }
+        HopTranslation translation = initialTranslations.get(0);
+        List<EdgeRow> edgeRows = scanEdges(translation);
+        List<PathTuple> out = new ArrayList<>(edgeRows.size());
+        for (EdgeRow row : edgeRows) {
+            PathTuple t = buildTupleFromEdge(hop, translation, row);
+            if (t != null) {
+                if (hop.getPathVariable().isPresent()) {
+                    t = decoratePathForFixedHop(hop, translation, t);
+                }
+                out.add(t);
+            }
+        }
+        return out;
+    }
+
+    private List<PathTuple> executeSubsequentHop(HopSpec hop, List<PathTuple> previous, VariableLengthExpander expander, int hopIndex) throws Exception {
+        // Determine the junction variable: the endpoint of this hop already bound by previous tuples.
+        String hopSourceVar = hop.getSource().getVariable();
+        String hopSinkVar = hop.getSink().getVariable();
+        Set<String> prevBoundVars = previous.get(0).keys();
+        String junctionVar;
+        boolean junctionIsHopSource;
+        if (prevBoundVars.contains(hopSourceVar)) {
+            junctionVar = hopSourceVar;
+            junctionIsHopSource = true;
+        } else if (prevBoundVars.contains(hopSinkVar)) {
+            junctionVar = hopSinkVar;
+            junctionIsHopSource = false;
+        } else {
+            throw new CypherUnsupportedException(
+                            "hop " + hopIndex + " shares no variable with the prior results; " + "disconnected patterns are not supported");
+        }
+
+        if (hop.isVariableLength()) {
+            return expander.expand(hop, previous, junctionVar, junctionIsHopSource);
+        }
+
+        Set<String> frontier = buildFrontier(previous, junctionVar);
+        // Intersect with identity filters on the junction endpoint.
+        NodeBinding junctionBinding = junctionIsHopSource ? hop.getSource() : hop.getSink();
+        if (!junctionBinding.getIdentityEquals().isEmpty()) {
+            frontier.retainAll(junctionBinding.getIdentityEquals().values());
+        }
+        if (frontier.isEmpty()) {
+            return new ArrayList<>();
+        }
+        if (frontier.size() > limits.getMaxFrontierSize()) {
+            throw new CypherUnsupportedException("hop " + hopIndex + " frontier size " + frontier.size() + " exceeds cap of " + limits.getMaxFrontierSize());
+        }
+
+        HopTranslation translation = junctionIsHopSource ? hopTranslator.translate(hop, frontier) : hopTranslator.translateWithSinkFrontier(hop, frontier);
+        List<EdgeRow> edgeRows = scanEdges(translation);
+        Map<String,List<PathTuple>> index = buildIndex(previous, junctionVar);
+        List<PathTuple> expanded = new ArrayList<>();
+        for (EdgeRow row : edgeRows) {
+            PathTuple edgeTuple = buildTupleFromEdge(hop, translation, row);
+            if (edgeTuple == null) {
+                continue;
+            }
+            String junctionValue = edgeTuple.get(junctionVar);
+            List<PathTuple> matching = index.get(junctionValue);
+            if (matching == null) {
+                continue;
+            }
+            for (PathTuple prev : matching) {
+                PathTuple merged = prev.merge(edgeTuple);
+                if (hop.getPathVariable().isPresent()) {
+                    merged = decoratePathForFixedHop(hop, translation, merged, edgeTuple);
+                }
+                expanded.add(merged);
+            }
+        }
+        return expanded;
+    }
+
+    /**
+     * For a fixed-length hop bound to a path variable, append the source-node (when this is the first appearance of the path), the edge, and the sink-node to
+     * the path geometry.
+     */
+    private PathTuple decoratePathForFixedHop(HopSpec hop, HopTranslation translation, PathTuple tuple) {
+        return decoratePathForFixedHop(hop, translation, tuple, tuple);
+    }
+
+    private PathTuple decoratePathForFixedHop(HopSpec hop, HopTranslation translation, PathTuple tuple, PathTuple edgeBindings) {
+        String pathVar = hop.getPathVariable().get();
+        String sourceVar = hop.getSource().getVariable();
+        String sinkVar = hop.getSink().getVariable();
+        String sourceVal = edgeBindings.get(sourceVar);
+        String sinkVal = edgeBindings.get(sinkVar);
+        PathTuple out = tuple;
+        if (out.getPath(pathVar).isEmpty()) {
+            out = out.extendPath(pathVar, new PathElement.NodeElement(sourceVar, sourceVal, null));
+        }
+        out = out.extendPath(pathVar, new PathElement.EdgeElement(hop.getRelVariable().orElse(null), hop.getRel().getCypherType(), sourceVal, sinkVal,
+                        edgeAttributes(hop, edgeBindings)));
+        out = out.extendPath(pathVar, new PathElement.NodeElement(sinkVar, sinkVal, null));
+        return out;
+    }
+
+    private List<PathTuple> buildLiteralFrontierTuples(HopSpec hop) {
+        // Seed BFS with one tuple per source-identity literal so VariableLengthExpander
+        // can produce the proper hop-source binding when scanning step 1.
+        NodeBinding source = hop.getSource();
+        List<PathTuple> seed = new ArrayList<>();
+        for (String value : source.getIdentityEquals().values()) {
+            Map<String,String> map = new LinkedHashMap<>(1);
+            map.put(source.getVariable(), value);
+            PathTuple t = PathTuple.of(map);
+            if (hop.getPathVariable().isPresent()) {
+                t = t.extendPath(hop.getPathVariable().get(), new PathElement.NodeElement(source.getVariable(), value, null));
+            }
+            seed.add(t);
+        }
+        return seed;
+    }
+
+    private Map<String,String> edgeAttributes(HopSpec hop, PathTuple edgeBindings) {
+        if (hop.getRelVariable().isEmpty()) {
+            return null;
+        }
+        String relVar = hop.getRelVariable().get();
+        Map<String,String> out = new LinkedHashMap<>();
+        for (String attr : hop.getRel().getAttributeMappings().keySet()) {
+            String v = edgeBindings.get(relVar + "." + attr);
+            if (v != null) {
+                out.put(attr, v);
+            }
+        }
+        return out;
+    }
+
+    private boolean needsEnrichment(CypherPlan plan) {
+        for (Projection p : plan.getProjections()) {
+            if (p.getKind() == Projection.Kind.NODE_SHARD_PROPERTY) {
+                return true;
+            }
+            if (p.getKind() == Projection.Kind.AGGREGATE && p.getAggregateSpec().isPresent()) {
+                // Aggregates whose argument references a non-identity node property
+                // ("var.prop") must run after enrichment so the value exists on the
+                // tuple. We can't tell here whether the prop is the identity without
+                // the schema, so we conservatively trigger enrichment whenever an
+                // aggregate has a property argument; enrich() will request the prop
+                // and the enrichment service no-ops for already-bound values.
+                if (p.getAggregateSpec().get().getArgumentProperty().isPresent()) {
+                    return true;
+                }
+            }
+        }
+        for (HopSpec hop : plan.getHops()) {
+            if (hop.getSource().requiresShardEnrichment() || hop.getSink().requiresShardEnrichment()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     // ---- scan -----------------------------------------------------------
 
-    private List<Map.Entry<Key,Value>> scanEdges(HopTranslation translation) throws Exception {
+    List<EdgeRow> scanEdges(HopTranslation translation) throws Exception {
         BatchScanner scanner = QueryScannerHelper.createBatchScanner(client, tableName, auths, queryThreads, query);
         scanner.setRanges(translation.getRanges());
 
-        IteratorSetting filter = new IteratorSetting(FILTER_PRIORITY,
-                        EdgeFilterIterator.class.getSimpleName() + "_" + FILTER_PRIORITY, EdgeFilterIterator.class);
+        IteratorSetting filter = new IteratorSetting(FILTER_PRIORITY, EdgeFilterIterator.class.getSimpleName() + "_" + FILTER_PRIORITY,
+                        EdgeFilterIterator.class);
         filter.addOption(EdgeFilterIterator.JEXL_OPTION, translation.getFilterJexl());
         filter.addOption(EdgeFilterIterator.PROTOBUF_OPTION, "TRUE");
         filter.addOption(EdgeFilterIterator.INCLUDE_STATS_OPTION, "FALSE");
         scanner.addScanIterator(filter);
 
-        List<Map.Entry<Key,Value>> out = new ArrayList<>();
+        List<EdgeRow> out = new ArrayList<>();
         try {
             for (Map.Entry<Key,Value> entry : scanner) {
-                out.add(entry);
+                out.add(new EdgeRow(entry.getKey(), entry.getValue()));
             }
         } finally {
             scanner.close();
@@ -235,7 +345,7 @@ public final class MultiHopExecutor {
 
     // ---- tuple construction from an edge row ----------------------------
 
-    private PathTuple buildTupleFromEdge(HopSpec hop, HopTranslation translation, Map.Entry<Key,Value> row) {
+    PathTuple buildTupleFromEdge(HopSpec hop, HopTranslation translation, EdgeRow row) {
         EdgeKey edgeKey;
         try {
             edgeKey = EdgeKey.decode(row.getKey());
@@ -303,7 +413,31 @@ public final class MultiHopExecutor {
             }
         });
 
-        return PathTuple.of(tupleMap);
+        return PathTuple.of(tupleMap, row.getVisibility());
+    }
+
+    long edgeFingerprint(HopSpec hop, EdgeRow row) {
+        EdgeKey edgeKey;
+        try {
+            edgeKey = EdgeKey.decode(row.getKey());
+        } catch (Exception e) {
+            return row.getKey().hashCode();
+        }
+        // Canonicalise the endpoints for an undirected relationship so the forward
+        // and reverse physical rows yield identical fingerprints — required for
+        // trail dedup along a single path.
+        String a = edgeKey.getSourceData();
+        String b = edgeKey.getSinkData();
+        String low = a.compareTo(b) <= 0 ? a : b;
+        String high = a.compareTo(b) <= 0 ? b : a;
+        long h = 1125899906842597L; // prime
+        h = 31 * h + hop.getRel().getEdgeType().hashCode();
+        h = 31 * h + low.hashCode();
+        h = 31 * h + high.hashCode();
+        h = 31 * h + (edgeKey.getAttribute1() == null ? 0 : edgeKey.getAttribute1().hashCode());
+        h = 31 * h + (edgeKey.getAttribute2() == null ? 0 : edgeKey.getAttribute2().hashCode());
+        h = 31 * h + (edgeKey.getAttribute3() == null ? 0 : edgeKey.getAttribute3().hashCode());
+        return h;
     }
 
     // ---- frontier + join ------------------------------------------------
@@ -336,14 +470,18 @@ public final class MultiHopExecutor {
         if (enrichmentService == null) {
             throw new IllegalStateException("ShardEnrichmentService is required for non-identity node property projections but was not configured");
         }
-        // Build the set of (nodeVar, propertyName) pairs that need enrichment.
         Map<String,Set<String>> nodePropsNeeded = new LinkedHashMap<>();
         for (Projection p : plan.getProjections()) {
             if (p.getKind() == Projection.Kind.NODE_SHARD_PROPERTY) {
                 nodePropsNeeded.computeIfAbsent(p.getVariable(), k -> new LinkedHashSet<>()).add(p.getProperty());
             }
+            if (p.getKind() == Projection.Kind.AGGREGATE && p.getAggregateSpec().isPresent()) {
+                p.getAggregateSpec().get().getArgumentVariable().ifPresent(v -> {
+                    p.getAggregateSpec().get().getArgumentProperty()
+                                    .ifPresent(prop -> nodePropsNeeded.computeIfAbsent(v, k -> new LinkedHashSet<>()).add(prop));
+                });
+            }
         }
-        // Also gather shard filter properties needed to post-filter tuples.
         for (HopSpec hop : plan.getHops()) {
             addShardFilterProperties(hop.getSource(), nodePropsNeeded);
             addShardFilterProperties(hop.getSink(), nodePropsNeeded);
@@ -353,8 +491,7 @@ public final class MultiHopExecutor {
 
     private void addShardFilterProperties(NodeBinding binding, Map<String,Set<String>> nodePropsNeeded) {
         if (binding.requiresShardEnrichment()) {
-            nodePropsNeeded.computeIfAbsent(binding.getVariable(), k -> new LinkedHashSet<>())
-                            .addAll(binding.getShardPropertyFilters().keySet());
+            nodePropsNeeded.computeIfAbsent(binding.getVariable(), k -> new LinkedHashSet<>()).addAll(binding.getShardPropertyFilters().keySet());
         }
     }
 
@@ -371,11 +508,17 @@ public final class MultiHopExecutor {
         return out;
     }
 
+    /**
+     * ASCII unit-separator between concatenated projected values in the DISTINCT key. Using a control character that cannot appear inside identifier/property
+     * values prevents false-positive collisions like {@code ["ab","c"]} colliding with {@code ["a","bc"]}.
+     */
+    private static final char DISTINCT_KEY_SEP = '';
+
     private String projectedKey(PathTuple t, List<Projection> projections) {
         StringBuilder sb = new StringBuilder();
         for (Projection p : projections) {
             if (sb.length() > 0) {
-                sb.append('');
+                sb.append(DISTINCT_KEY_SEP);
             }
             String v = resolveProjectedValue(t, p);
             if (v != null) {
@@ -386,18 +529,43 @@ public final class MultiHopExecutor {
     }
 
     private String resolveProjectedValue(PathTuple t, Projection p) {
-        if (p.getKind() == Projection.Kind.NODE_PROPERTY) {
-            return t.get(p.getVariable());
+        switch (p.getKind()) {
+            case NODE_PROPERTY:
+                return t.get(p.getVariable());
+            case REL_PROPERTY:
+            case NODE_SHARD_PROPERTY:
+                return t.get(p.getVariable() + "." + p.getProperty());
+            case AGGREGATE:
+                return t.get(Projection.AGGREGATE_TUPLE_KEY_PREFIX + p.getAlias());
+            case PATH_OBJECT:
+                return canonicalPathKey(t.getPath(p.getVariable()));
+            default:
+                return null;
         }
-        if (p.getKind() == Projection.Kind.REL_PROPERTY) {
-            return t.get(p.getVariable() + "." + p.getProperty());
+    }
+
+    /**
+     * Canonical, content-based key for a path's geometry. Two tuples that materialize the same node/edge sequence dedup to a single DISTINCT row and sort
+     * stably, independent of object identity.
+     */
+    static String canonicalPathKey(java.util.List<PathElement> elements) {
+        if (elements == null || elements.isEmpty()) {
+            return "path:";
         }
-        // NODE_SHARD_PROPERTY — enriched value stored as "var.prop"
-        return t.get(p.getVariable() + "." + p.getProperty());
+        StringBuilder sb = new StringBuilder("path:");
+        for (PathElement el : elements) {
+            if (el.getKind() == PathElement.Kind.NODE) {
+                PathElement.NodeElement n = (PathElement.NodeElement) el;
+                sb.append('N').append('').append(n.getIdentity()).append('');
+            } else {
+                PathElement.EdgeElement e = (PathElement.EdgeElement) el;
+                sb.append('E').append('').append(e.getType()).append('').append(e.getSourceIdentity()).append('').append(e.getSinkIdentity()).append('');
+            }
+        }
+        return sb.toString();
     }
 
     private void sort(List<PathTuple> tuples, List<SortSpec> orderBy, List<Projection> projections) {
-        // Build alias → Projection lookup for resolving sort keys.
         Map<String,Projection> byAlias = new LinkedHashMap<>();
         for (Projection p : projections) {
             byAlias.put(p.getAlias(), p);
@@ -407,13 +575,9 @@ public final class MultiHopExecutor {
         for (SortSpec spec : orderBy) {
             Projection proj = byAlias.get(spec.getAlias());
             if (proj == null) {
-                continue; // semantic analyzer guarantees this is a projected alias
+                continue;
             }
-            final Projection finalProj = proj;
-            Comparator<PathTuple> c = Comparator.comparing(t -> {
-                String val = resolveProjectedValue(t, finalProj);
-                return val != null ? val : "";
-            });
+            Comparator<PathTuple> c = comparatorFor(proj);
             if (spec.getDirection() == datawave.query.cypher.ast.SortItem.Direction.DESC) {
                 c = c.reversed();
             }
@@ -422,5 +586,41 @@ public final class MultiHopExecutor {
         if (comparator != null) {
             tuples.sort(comparator);
         }
+    }
+
+    private static Comparator<PathTuple> comparatorFor(Projection p) {
+        if (p.getKind() == Projection.Kind.AGGREGATE) {
+            // Numeric ordering on aggregate result; non-numeric (e.g. MIN/MAX of strings)
+            // falls back to lexicographic.
+            return Comparator.comparing((PathTuple t) -> aggregateAsBigDecimal(t, p), Comparator.nullsLast(Comparator.naturalOrder()))
+                            .thenComparing((PathTuple t) -> aggregateAsString(t, p), Comparator.nullsLast(Comparator.naturalOrder()));
+        }
+        return Comparator.comparing((PathTuple t) -> stringValueFor(t, p), Comparator.nullsLast(Comparator.naturalOrder()));
+    }
+
+    private static java.math.BigDecimal aggregateAsBigDecimal(PathTuple t, Projection p) {
+        String raw = t.get(Projection.AGGREGATE_TUPLE_KEY_PREFIX + p.getAlias());
+        if (raw == null) {
+            return null;
+        }
+        try {
+            return new java.math.BigDecimal(raw);
+        } catch (NumberFormatException ignored) {
+            return null;
+        }
+    }
+
+    private static String aggregateAsString(PathTuple t, Projection p) {
+        return t.get(Projection.AGGREGATE_TUPLE_KEY_PREFIX + p.getAlias());
+    }
+
+    private static String stringValueFor(PathTuple t, Projection p) {
+        if (p.getKind() == Projection.Kind.NODE_PROPERTY) {
+            return t.get(p.getVariable());
+        }
+        if (p.getKind() == Projection.Kind.PATH_OBJECT) {
+            return canonicalPathKey(t.getPath(p.getVariable()));
+        }
+        return t.get(p.getVariable() + "." + p.getProperty());
     }
 }

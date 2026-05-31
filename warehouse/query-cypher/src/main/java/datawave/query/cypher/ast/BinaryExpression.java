@@ -3,19 +3,7 @@ package datawave.query.cypher.ast;
 public final class BinaryExpression extends Expression {
 
     public enum Operator {
-        OR("OR"),
-        AND("AND"),
-        EQ("="),
-        NEQ("<>"),
-        LT("<"),
-        LTE("<="),
-        GT(">"),
-        GTE(">="),
-        ADD("+"),
-        SUB("-"),
-        MUL("*"),
-        DIV("/"),
-        MOD("%");
+        OR("OR"), AND("AND"), EQ("="), NEQ("<>"), LT("<"), LTE("<="), GT(">"), GTE(">="), ADD("+"), SUB("-"), MUL("*"), DIV("/"), MOD("%");
 
         private final String symbol;
 

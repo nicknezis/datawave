@@ -35,8 +35,7 @@ public class GraphSchemaTest {
     public void rejectsRelationshipReferencingUnknownLabel() {
         NodeMapping actor = new NodeMapping("Actor", "tvmaze", "name", "EMBEDDED_CAST_PERSON_NAME", new LinkedHashMap<>());
         RelMapping bogus = new RelMapping("X", "X", "Actor", "Show", EdgeDirection.UNDIRECTED, Collections.emptyMap());
-        assertThatThrownBy(() -> new GraphSchema(0L, List.of(actor), List.of(bogus))).isInstanceOf(IllegalArgumentException.class)
-                        .hasMessageContaining("Show");
+        assertThatThrownBy(() -> new GraphSchema(0L, List.of(actor), List.of(bogus))).isInstanceOf(IllegalArgumentException.class).hasMessageContaining("Show");
     }
 
     @Test

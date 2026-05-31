@@ -15,11 +15,9 @@ import javax.xml.bind.annotation.XmlRootElement;
 import datawave.webservice.result.BaseQueryResponse;
 
 /**
- * Minimal M1 wire response: a list of {@link CypherRow rows} plus the
- * RETURN clause's column names. The proper {@code CypherQueryResponseBase}
- * + {@code DefaultCypherQueryResponse} pair lives in M4 (per feasibility
- * decision #3) where typed columns and nested path objects land. Until
- * then this wrapper keeps the BaseQueryLogic plumbing happy.
+ * Minimal M1 wire response: a list of {@link CypherRow rows} plus the RETURN clause's column names. The proper {@code CypherQueryResponseBase} +
+ * {@code DefaultCypherQueryResponse} pair lives in M4 (per feasibility decision #3) where typed columns and nested path objects land. Until then this wrapper
+ * keeps the BaseQueryLogic plumbing happy.
  */
 @XmlRootElement(name = "CypherQueryResponse")
 @XmlAccessorType(XmlAccessType.NONE)

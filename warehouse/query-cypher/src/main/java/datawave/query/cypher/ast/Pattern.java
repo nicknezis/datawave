@@ -3,9 +3,8 @@ package datawave.query.cypher.ast;
 import java.util.Optional;
 
 /**
- * A single named or anonymous path pattern. A named pattern ({@code p = (...)-[...]->(...)})
- * binds the whole path to the given variable; an anonymous pattern binds only the
- * sub-elements' variables.
+ * A single named or anonymous path pattern. A named pattern ({@code p = (...)-[...]->(...)}) binds the whole path to the given variable; an anonymous pattern
+ * binds only the sub-elements' variables.
  */
 public final class Pattern extends AstNode {
 

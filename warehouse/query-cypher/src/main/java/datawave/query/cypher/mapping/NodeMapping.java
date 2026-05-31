@@ -9,12 +9,9 @@ import java.util.Optional;
 /**
  * One Cypher label's mapping into the underlying DataWave shard/event store.
  * <p>
- * The {@link #getIdentityProperty()} is the Cypher property that, on disk,
- * is identical to the value placed into the edge SOURCE/SINK column. In M1
- * this is the only property that can be referenced in WHERE or RETURN
- * without triggering a shard-table join (which is M2 work). Other property
- * names are recorded in {@link #getProperties()} so M2's enrichment step
- * knows the on-disk field name to look up.
+ * The {@link #getIdentityProperty()} is the Cypher property that, on disk, is identical to the value placed into the edge SOURCE/SINK column. In M1 this is the
+ * only property that can be referenced in WHERE or RETURN without triggering a shard-table join (which is M2 work). Other property names are recorded in
+ * {@link #getProperties()} so M2's enrichment step knows the on-disk field name to look up.
  */
 public final class NodeMapping {
 

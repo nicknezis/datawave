@@ -9,15 +9,12 @@ import java.util.Optional;
 /**
  * One Cypher relationship type's mapping onto an on-disk edge type. Carries:
  * <ul>
- *   <li>the underlying TYPE column-family component,</li>
- *   <li>direction (so undirected Cypher matches over an undirected edge can
- *       canonicalize endpoint pairs and avoid emitting two physical rows as
- *       two logical results),</li>
- *   <li>the labels expected at the source and sink endpoints (used for
- *       startup-time validation against the schema and for cross-checking
- *       the Cypher pattern's node labels), and</li>
- *   <li>which positional edge-attribute slot a Cypher relationship-property
- *       maps to.</li>
+ * <li>the underlying TYPE column-family component,</li>
+ * <li>direction (so undirected Cypher matches over an undirected edge can canonicalize endpoint pairs and avoid emitting two physical rows as two logical
+ * results),</li>
+ * <li>the labels expected at the source and sink endpoints (used for startup-time validation against the schema and for cross-checking the Cypher pattern's
+ * node labels), and</li>
+ * <li>which positional edge-attribute slot a Cypher relationship-property maps to.</li>
  * </ul>
  */
 public final class RelMapping {

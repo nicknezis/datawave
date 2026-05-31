@@ -90,8 +90,7 @@ class CypherParserTest {
 
     @Test
     void parsesWhereAndReturnWithOrderAndLimit() {
-        CypherQuery q = parser
-                        .parse("MATCH (a:Actor) WHERE a.born > 1960 AND a.name <> 'Y' RETURN a.name AS name ORDER BY a.born DESC LIMIT 5");
+        CypherQuery q = parser.parse("MATCH (a:Actor) WHERE a.born > 1960 AND a.name <> 'Y' RETURN a.name AS name ORDER BY a.born DESC LIMIT 5");
         MatchClause match = firstMatch(q);
         BinaryExpression where = (BinaryExpression) match.getWhere().orElseThrow();
         assertThat(where.getOperator()).isEqualTo(BinaryExpression.Operator.AND);
